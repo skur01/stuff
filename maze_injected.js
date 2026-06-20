@@ -1,6 +1,5 @@
 (
 game => {
-	console.log("%c=== MAZE GENERATION (INJECTED) LOADED :: 4 corners TL2313 TR2312 BL2297 BR2296 ===", "background:#c0392b;color:#fff;font-size:16px;padding:4px;");
 	if (!game.map) return;
 	if (!game.map.width || !game.map.height) return;
 
@@ -63,60 +62,148 @@ game => {
 		open.push(new Array(gridWidth).fill(false));
 	}
 
+	const INTENSITY = 0.65;
+	const BASE_CHAOS = 0.12;
+	const PASSAGE_WIDTHS = [3, 3, 5, 7];
+
 	const cellKey = (cx, cy) => cy * CELLS_W + cx;
-	const visited = new Set();
-	const stack = [[0, 0]];
+	const inCellBounds = (cx, cy) => cx >= 0 && cx < CELLS_W && cy >= 0 && cy < CELLS_H;
 	const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
+	const centerCount = Math.max(1, Math.round(CELLS_W * CELLS_H / 40));
+	const chaosRadius = Math.max(2, Math.round(Math.min(CELLS_W, CELLS_H) / 3));
+	const chaosCenters = [];
+	for (let c = 0; c < centerCount; ++c) {
+		chaosCenters.push([Math.floor(nextRandom() * CELLS_W), Math.floor(nextRandom() * CELLS_H), 0.8 + nextRandom() * 0.2]);
+	}
+
+	const chaosAt = (cx, cy) => {
+		let peak = 0;
+		for (const center of chaosCenters) {
+			const distX = cx - center[0];
+			const distY = cy - center[1];
+			const dist = Math.sqrt(distX * distX + distY * distY);
+			const falloff = Math.max(0, 1 - dist / chaosRadius) * center[2];
+			if (falloff > peak) peak = falloff;
+		}
+		return Math.min(1, BASE_CHAOS + peak * INTENSITY);
+	};
+
+	const visited = new Set();
+	const active = [[0, 0]];
 	visited.add(cellKey(0, 0));
 	open[1][1] = true;
 
-	while (stack.length) {
-		const cx = stack[stack.length - 1][0];
-		const cy = stack[stack.length - 1][1];
+	while (active.length) {
+		const frontier = active[active.length - 1];
+		const useRandom = nextRandom() < chaosAt(frontier[0], frontier[1]);
+		const idx = useRandom ? Math.floor(nextRandom() * active.length) : active.length - 1;
+		const cx = active[idx][0];
+		const cy = active[idx][1];
 
 		const options = [];
 		for (const dir of DIRS) {
 			const nx = cx + dir[0];
 			const ny = cy + dir[1];
-			const inBounds = nx >= 0 && nx < CELLS_W && ny >= 0 && ny < CELLS_H;
-			if (inBounds && !visited.has(cellKey(nx, ny))) {
+			if (inCellBounds(nx, ny) && !visited.has(cellKey(nx, ny))) {
 				options.push([nx, ny, dir[0], dir[1]]);
 			}
 		}
 
 		if (!options.length) {
-			stack.pop();
+			active.splice(idx, 1);
 			continue;
 		}
 
 		const choice = options[Math.floor(nextRandom() * options.length)];
 		const nx = choice[0];
 		const ny = choice[1];
-		const dx = choice[2];
-		const dy = choice[3];
 
-		const cellTileX = cx * 2 + 1;
-		const cellTileY = cy * 2 + 1;
-		open[cellTileY + dy][cellTileX + dx] = true;
+		open[cy * 2 + 1 + choice[3]][cx * 2 + 1 + choice[2]] = true;
 		open[ny * 2 + 1][nx * 2 + 1] = true;
 
 		visited.add(cellKey(nx, ny));
-		stack.push([nx, ny]);
+		active.push([nx, ny]);
 	}
 
-	const buildLogical = (cellCount) => {
+	const roomAttempts = centerCount * 3;
+	for (let a = 0; a < roomAttempts; ++a) {
+		const roomX = Math.floor(nextRandom() * CELLS_W);
+		const roomY = Math.floor(nextRandom() * CELLS_H);
+		if (chaosAt(roomX, roomY) < 0.5) continue;
+
+		const roomW = 1 + Math.floor(nextRandom() * 2);
+		const roomH = 1 + Math.floor(nextRandom() * 2);
+		if (roomX + roomW >= CELLS_W || roomY + roomH >= CELLS_H) continue;
+
+		for (let cy = roomY; cy <= roomY + roomH; ++cy) {
+			for (let cx = roomX; cx <= roomX + roomW; ++cx) {
+				open[cy * 2 + 1][cx * 2 + 1] = true;
+				if (cx < roomX + roomW) open[cy * 2 + 1][cx * 2 + 2] = true;
+				if (cy < roomY + roomH) open[cy * 2 + 2][cx * 2 + 1] = true;
+			}
+		}
+	}
+
+	for (let cy = 0; cy < CELLS_H; ++cy) {
+		for (let cx = 0; cx < CELLS_W; ++cx) {
+			let degree = 0;
+			const closedDirs = [];
+			for (const dir of DIRS) {
+				const wallGy = cy * 2 + 1 + dir[1];
+				const wallGx = cx * 2 + 1 + dir[0];
+				if (open[wallGy][wallGx]) {
+					++degree;
+				} else if (inCellBounds(cx + dir[0], cy + dir[1])) {
+					closedDirs.push(dir);
+				}
+			}
+			if (degree <= 1 && closedDirs.length && nextRandom() < chaosAt(cx, cy) * 0.8) {
+				const dir = closedDirs[Math.floor(nextRandom() * closedDirs.length)];
+				open[cy * 2 + 1 + dir[1]][cx * 2 + 1 + dir[0]] = true;
+			}
+		}
+	}
+
+	const buildSpans = (cellCount) => {
 		const gridSize = cellCount * 2 + 1;
-		const logical = [];
+		const spans = [];
 		for (let g = 0; g < gridSize; ++g) {
-			const span = (g % 2 === 1) ? PASSAGE_SIZE : WALL_SIZE;
-			for (let s = 0; s < span; ++s) logical.push(g);
+			if (g % 2 === 1) {
+				spans.push(PASSAGE_WIDTHS[Math.floor(nextRandom() * PASSAGE_WIDTHS.length)]);
+			} else {
+				spans.push(WALL_SIZE);
+			}
+		}
+		return spans;
+	};
+
+	const fitSpans = (spans, maxTiles) => {
+		let total = 0;
+		for (const span of spans) total += span;
+		for (let g = 1; g < spans.length && total > maxTiles; g += 2) {
+			if (spans[g] > PASSAGE_SIZE) {
+				total -= spans[g] - PASSAGE_SIZE;
+				spans[g] = PASSAGE_SIZE;
+			}
+		}
+	};
+
+	const expandLogical = (spans) => {
+		const logical = [];
+		for (let g = 0; g < spans.length; ++g) {
+			for (let s = 0; s < spans[g]; ++s) logical.push(g);
 		}
 		return logical;
 	};
 
-	const colLogical = buildLogical(CELLS_W);
-	const rowLogical = buildLogical(CELLS_H);
+	const colSpan = buildSpans(CELLS_W);
+	const rowSpan = buildSpans(CELLS_H);
+	fitSpans(colSpan, mapTilesW);
+	fitSpans(rowSpan, mapTilesH);
+
+	const colLogical = expandLogical(colSpan);
+	const rowLogical = expandLogical(rowSpan);
 	const realCols = colLogical.length;
 	const realRows = rowLogical.length;
 
