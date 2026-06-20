@@ -79,6 +79,7 @@ game => {
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
 		MazeProgress: 0,
+		autoevolve_all: 1,
 		overworld_encounters_max_mons: 5,
 		encounter_chance: 5
 	};
@@ -382,6 +383,63 @@ game => {
 		game.map.ontile = "any";
 		game.map.addObject(7, warpX, warpY, "ev[MazeProgress]=+1&ev[MazeSeed]=0&warp=" + game.map.id + ",0");
 		game.map.ontile = prevOntile;
+	}
+
+	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
+
+	const evoLevelFor = (monObj) => {
+		if (monObj.dynamicLevel) {
+			let highest = 1;
+			const partyMons = (game.player && game.player.party && game.player.party.mons) || [];
+			for (const partyMon of partyMons) {
+				if (partyMon && partyMon.level > highest) highest = partyMon.level;
+			}
+			return highest;
+		}
+		return monObj.level || 1;
+	};
+
+	const resolveEvolvedUid = (uid, level, depth, cb) => {
+		if (depth > 5) {
+			cb(uid);
+			return;
+		}
+		getMon(uid, resolved => {
+			const data = resolved && resolved.data;
+			if (!data || !data.evolutions || !data.evolutions.length) {
+				cb(uid);
+				return;
+			}
+			const levelEvos = data.evolutions.filter(evo => evo[1] === 0 && level >= +evo[2] && (!evo[3] || evo[3] === REGION_UID));
+			if (!levelEvos.length) {
+				cb(uid);
+				return;
+			}
+			const nextUid = levelEvos[Math.floor(Math.random() * levelEvos.length)][0];
+			resolveEvolvedUid(nextUid, level, depth + 1, cb);
+		});
+	};
+
+	if (!game.map.__mazeEvoSkin && typeof getMon === "function") {
+		game.map.__mazeEvoSkin = true;
+		const origAddOverworldMon = game.map.addOverworldMon;
+		if (typeof origAddOverworldMon === "function") {
+			game.map.addOverworldMon = function(attr, mon, battleAttr) {
+				const self = this;
+				const baseUid = mon.split(";")[0];
+				getMon(mon, monObj => {
+					resolveEvolvedUid(baseUid, evoLevelFor(monObj), 0, evolvedUid => {
+						let finalMon = mon;
+						if (evolvedUid && evolvedUid !== baseUid) {
+							const parts = mon.split(";");
+							parts[0] = evolvedUid;
+							finalMon = parts.join(";");
+						}
+						origAddOverworldMon.call(self, attr, finalMon, battleAttr);
+					});
+				});
+			};
+		}
 	}
 
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
