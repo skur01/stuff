@@ -82,6 +82,7 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
+		MazeRoomDensity: 15,
 		MazeLevelMin: 5,
 		MazeLevelMax: 10,
 		MazeLevelStep: 3,
@@ -163,10 +164,12 @@ game => {
 		active.push([nx, ny]);
 	}
 
+	const roomedCells = new Set();
 	const carveRoom = (rx0, ry0, rw, rh) => {
 		for (let cy = ry0; cy <= ry0 + rh; ++cy) {
 			for (let cx = rx0; cx <= rx0 + rw; ++cx) {
 				if (cx < 0 || cy < 0 || cx >= CELLS_W || cy >= CELLS_H) continue;
+				roomedCells.add(cellKey(cx, cy));
 				open[cy * 2 + 1][cx * 2 + 1] = true;
 				if (cx < rx0 + rw && cx + 1 < CELLS_W) open[cy * 2 + 1][cx * 2 + 2] = true;
 				if (cy < ry0 + rh && cy + 1 < CELLS_H) open[cy * 2 + 2][cx * 2 + 1] = true;
@@ -174,8 +177,10 @@ game => {
 		}
 	};
 
+	const roomCellBudget = Math.round(CELLS_W * CELLS_H * mazeVar("MazeRoomDensity", MAZE_DEFAULTS.MazeRoomDensity) / 100);
 	const roomAttempts = centerCount * 4;
 	for (let a = 0; a < roomAttempts; ++a) {
+		if (roomedCells.size >= roomCellBudget) break;
 		const roomX = Math.floor(nextRandom() * CELLS_W);
 		const roomY = Math.floor(nextRandom() * CELLS_H);
 		if (chaosAt(roomX, roomY) < 0.45) continue;
