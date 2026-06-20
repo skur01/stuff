@@ -234,30 +234,22 @@ game => {
 	}
 
 	const ENCOUNTER_LIST = "encounters";
-	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", 2));
+	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", 1));
+	const keepChance = 1 / (ENCOUNTER_SPACING * ENCOUNTER_SPACING);
 
 	if (typeof game.map.__mazeBaseEncounters === "undefined") {
 		game.map.__mazeBaseEncounters = (game.map.overworldEncounters || []).slice();
 	}
 
 	const overworldPoints = game.map.__mazeBaseEncounters.slice();
-	for (let ry = 0; ry < realRows; ry += ENCOUNTER_SPACING) {
-		for (let rx = 0; rx < realCols; rx += ENCOUNTER_SPACING) {
-			if (isFloor(rx, ry)) {
+	for (let ry = 0; ry < realRows; ++ry) {
+		for (let rx = 0; rx < realCols; ++rx) {
+			if (isFloor(rx, ry) && (ENCOUNTER_SPACING <= 1 || nextRandom() < keepChance)) {
 				overworldPoints.push([(ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, ENCOUNTER_LIST]);
 			}
 		}
 	}
 	game.map.overworldEncounters = overworldPoints;
-
-	const encLists = game.map.encounterLists || {};
-	const encTable = encLists[ENCOUNTER_LIST];
-	const floorPointsAdded = overworldPoints.length - game.map.__mazeBaseEncounters.length;
-	console.log("[MAZE ENCOUNTERS] floor spawn points registered:", floorPointsAdded, "| total overworldEncounters:", game.map.overworldEncounters.length);
-	console.log("[MAZE ENCOUNTERS] encounterLists keys:", Object.keys(encLists));
-	console.log("[MAZE ENCOUNTERS] '" + ENCOUNTER_LIST + "' table present:", !!encTable, "| entries:", encTable ? encTable.length : 0);
-	console.log("[MAZE ENCOUNTERS] max_mons:", mazeVar("overworld_encounters_max_mons", 5), "| encounter_chance:", mazeVar("encounter_chance", 5), "| spacing:", ENCOUNTER_SPACING);
-	if (!encTable) console.warn("[MAZE ENCOUNTERS] No '" + ENCOUNTER_LIST + "' table found on this map - set up an encounter list named '" + ENCOUNTER_LIST + "' or nothing will spawn.");
 
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
 		game.map.__mazeOverlay.parent.removeChild(game.map.__mazeOverlay);
