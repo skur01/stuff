@@ -67,9 +67,24 @@ game => {
 		return isNaN(value) ? defaultValue : value;
 	};
 
-	const INTENSITY = mazeVar("MazeIntensity", 65) / 100;
-	const BASE_CHAOS = mazeVar("MazeBaseChaos", 12) / 100;
-	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", 7);
+	const MAZE_DEFAULTS = {
+		MazeIntensity: 65,
+		MazeBaseChaos: 12,
+		MazeMaxWidth: 7,
+		MazeEncounterSpacing: 1,
+		overworld_encounters_max_mons: 5,
+		encounter_chance: 5
+	};
+
+	game.map.mapVars = game.map.mapVars || {};
+	for (const name in MAZE_DEFAULTS) {
+		if (typeof game.map.mapVars[name] === "undefined") game.map.mapVars[name] = MAZE_DEFAULTS[name];
+		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
+	}
+
+	const INTENSITY = mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) / 100;
+	const BASE_CHAOS = mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) / 100;
+	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
 	const PASSAGE_WIDTHS = [3, 3];
 	for (let width = 5; width <= MAX_PASSAGE_WIDTH; width += 2) PASSAGE_WIDTHS.push(width);
 
@@ -234,7 +249,7 @@ game => {
 	}
 
 	const ENCOUNTER_LIST = "encounters";
-	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", 1));
+	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", MAZE_DEFAULTS.MazeEncounterSpacing));
 	const keepChance = 1 / (ENCOUNTER_SPACING * ENCOUNTER_SPACING);
 
 	if (typeof game.map.__mazeBaseEncounters === "undefined") {
