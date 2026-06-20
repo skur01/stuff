@@ -42,6 +42,10 @@ game => {
 		game.trigger("ev[MazeSeed]=" + seed);
 	}
 
+	if (typeof game.map.eventVars["MazeProgress"] === "undefined") {
+		game.trigger("ev[MazeProgress]=0");
+	}
+
 	const mapTilesW = Math.floor(game.map.width / TILE_SIZE) - ORIGIN_X;
 	const mapTilesH = Math.floor(game.map.height / TILE_SIZE) - ORIGIN_Y;
 	const period = PASSAGE_SIZE + WALL_SIZE;
@@ -78,7 +82,9 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
-		MazeProgress: 0,
+		MazeLevelMin: 5,
+		MazeLevelMax: 10,
+		MazeLevelStep: 3,
 		autoevolve_all: 1,
 		overworld_encounters_max_mons: 5,
 		encounter_chance: 5
@@ -90,7 +96,7 @@ game => {
 		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
 	}
 
-	const MAZE_PROGRESS = mazeVar("MazeProgress", MAZE_DEFAULTS.MazeProgress);
+	const MAZE_PROGRESS = mazeVar("MazeProgress", 0);
 	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + MAZE_PROGRESS * 10) / 100;
 	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + MAZE_PROGRESS * 5) / 100;
 	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
@@ -388,16 +394,24 @@ game => {
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
 	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
 
-	const evoLevelFor = (monObj) => {
-		if (monObj.dynamicLevel) {
-			let highest = 1;
-			const partyMons = (game.player && game.player.party && game.player.party.mons) || [];
-			for (const partyMon of partyMons) {
-				if (partyMon && partyMon.level > highest) highest = partyMon.level;
-			}
-			return highest;
+	const levelMin = mazeVar("MazeLevelMin", MAZE_DEFAULTS.MazeLevelMin) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
+	const levelMax = mazeVar("MazeLevelMax", MAZE_DEFAULTS.MazeLevelMax) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
+
+	const rollEncounterLevel = () => {
+		const lo = Math.max(1, Math.min(100, levelMin));
+		const hi = Math.max(lo, Math.min(100, levelMax));
+		return lo + Math.floor(Math.random() * (hi - lo + 1));
+	};
+
+	const LEVEL_TOKENS = ["l", "lv", "level", "levels", "d", "dynamic-level"];
+	const setMonLevel = (monStr, level) => {
+		const parts = monStr.split(";");
+		const kept = [parts[0]];
+		for (let p = 1; p < parts.length; ++p) {
+			if (LEVEL_TOKENS.indexOf(parts[p].split(" ")[0]) === -1) kept.push(parts[p]);
 		}
-		return monObj.level || 1;
+		kept.push("l " + level);
+		return kept.join(";");
 	};
 
 	const pickSplitEvo = (candidates) => candidates[Math.floor(Math.random() * candidates.length)];
@@ -500,17 +514,20 @@ game => {
 		if (typeof origAddOverworldMon === "function") {
 			game.map.addOverworldMon = function(attr, mon, battleAttr) {
 				const self = this;
-				const baseUid = mon.split(";")[0];
-				getMon(mon, monObj => {
-					processEvoUid(baseUid, evoLevelFor(monObj), 0, null, evolvedUid => {
-						let finalMon = mon;
-						if (evolvedUid && evolvedUid !== baseUid) {
-							const parts = mon.split(";");
-							parts[0] = evolvedUid;
-							finalMon = parts.join(";");
-						}
-						origAddOverworldMon.call(self, attr, finalMon, battleAttr);
-					});
+				if (battleAttr && battleAttr.length >= 4) {
+					battleAttr[3] = (battleAttr[3] ? battleAttr[3] + ";" : "") + "nocatch;norun";
+				}
+				const level = rollEncounterLevel();
+				const leveledMon = setMonLevel(mon, level);
+				const baseUid = leveledMon.split(";")[0];
+				processEvoUid(baseUid, level, 0, null, evolvedUid => {
+					let finalMon = leveledMon;
+					if (evolvedUid && evolvedUid !== baseUid) {
+						const parts = leveledMon.split(";");
+						parts[0] = evolvedUid;
+						finalMon = parts.join(";");
+					}
+					origAddOverworldMon.call(self, attr, finalMon, battleAttr);
 				});
 			};
 		}
