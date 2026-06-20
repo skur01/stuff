@@ -31,6 +31,10 @@ game => {
 	const INNER_BL_Y = 2288;
 	const INNER_BR_X = 112;
 	const INNER_BR_Y = 2288;
+	const DOOR_A_X = 176;
+	const DOOR_A_Y = 2384;
+	const DOOR_B_X = 176;
+	const DOOR_B_Y = 2384;
 
 	let seed = game.map.eventVars["MazeSeed"] || 0;
 	if (!seed) {
@@ -74,6 +78,7 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
+		MazeProgress: 0,
 		overworld_encounters_max_mons: 5,
 		encounter_chance: 5
 	};
@@ -84,8 +89,9 @@ game => {
 		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
 	}
 
-	const INTENSITY = mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) / 100;
-	const BASE_CHAOS = mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) / 100;
+	const MAZE_PROGRESS = mazeVar("MazeProgress", MAZE_DEFAULTS.MazeProgress);
+	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + MAZE_PROGRESS * 10) / 100;
+	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + MAZE_PROGRESS * 5) / 100;
 	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
 	const PASSAGE_WIDTHS = [3, 3];
 	for (let width = 5; width <= MAX_PASSAGE_WIDTH; width += 2) PASSAGE_WIDTHS.push(width);
@@ -150,22 +156,31 @@ game => {
 		active.push([nx, ny]);
 	}
 
-	const roomAttempts = centerCount * 3;
+	const carveRoom = (rx0, ry0, rw, rh) => {
+		for (let cy = ry0; cy <= ry0 + rh; ++cy) {
+			for (let cx = rx0; cx <= rx0 + rw; ++cx) {
+				if (cx < 0 || cy < 0 || cx >= CELLS_W || cy >= CELLS_H) continue;
+				open[cy * 2 + 1][cx * 2 + 1] = true;
+				if (cx < rx0 + rw && cx + 1 < CELLS_W) open[cy * 2 + 1][cx * 2 + 2] = true;
+				if (cy < ry0 + rh && cy + 1 < CELLS_H) open[cy * 2 + 2][cx * 2 + 1] = true;
+			}
+		}
+	};
+
+	const roomAttempts = centerCount * 4;
 	for (let a = 0; a < roomAttempts; ++a) {
 		const roomX = Math.floor(nextRandom() * CELLS_W);
 		const roomY = Math.floor(nextRandom() * CELLS_H);
-		if (chaosAt(roomX, roomY) < 0.5) continue;
+		if (chaosAt(roomX, roomY) < 0.45) continue;
 
-		const roomW = 1 + Math.floor(nextRandom() * 2);
-		const roomH = 1 + Math.floor(nextRandom() * 2);
-		if (roomX + roomW >= CELLS_W || roomY + roomH >= CELLS_H) continue;
+		const roomW = 1 + Math.floor(nextRandom() * 3);
+		const roomH = 1 + Math.floor(nextRandom() * 3);
+		carveRoom(roomX, roomY, roomW, roomH);
 
-		for (let cy = roomY; cy <= roomY + roomH; ++cy) {
-			for (let cx = roomX; cx <= roomX + roomW; ++cx) {
-				open[cy * 2 + 1][cx * 2 + 1] = true;
-				if (cx < roomX + roomW) open[cy * 2 + 1][cx * 2 + 2] = true;
-				if (cy < roomY + roomH) open[cy * 2 + 2][cx * 2 + 1] = true;
-			}
+		if (nextRandom() < 0.6) {
+			const offX = roomX + Math.floor(nextRandom() * (roomW + 1));
+			const offY = roomY + Math.floor(nextRandom() * (roomH + 1));
+			carveRoom(offX, offY, 1 + Math.floor(nextRandom() * 2), 1 + Math.floor(nextRandom() * 2));
 		}
 	}
 
@@ -264,7 +279,7 @@ game => {
 	const colCenter = buildCenters(colLogical);
 	const rowCenter = buildCenters(rowLogical);
 
-	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty);
+	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty) + MAZE_PROGRESS;
 	const ITEM_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
 	const ITEM_TABLE = [
 		{ uid: "06xa6ohm", minDifficulty: 0, baseChance: 60 },
@@ -318,6 +333,62 @@ game => {
 		}
 	}
 	game.map.overworldEncounters = overworldPoints;
+
+	const doorCandidates = [];
+	for (let ry = 2; ry < realRows - 2; ++ry) {
+		for (let rx = 2; rx < realCols - 2; ++rx) {
+			if (!isFloor(rx, ry) && isFloor(rx, ry + 1) && !isFloor(rx - 1, ry) && !isFloor(rx + 1, ry)) {
+				doorCandidates.push([rx, ry]);
+			}
+		}
+	}
+
+	let pointA = null;
+	let pointB = null;
+	if (doorCandidates.length >= 2) {
+		pointA = doorCandidates[Math.floor(nextRandom() * doorCandidates.length)];
+
+		const diag = Math.sqrt(realCols * realCols + realRows * realRows);
+		const minDist = diag * 0.45;
+		const maxDist = diag * 0.9;
+		const inBand = [];
+		let farthest = null;
+		let farthestDist = -1;
+		for (const candidate of doorCandidates) {
+			if (candidate === pointA) continue;
+			const dx = candidate[0] - pointA[0];
+			const dy = candidate[1] - pointA[1];
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (dist > farthestDist) {
+				farthestDist = dist;
+				farthest = candidate;
+			}
+			if (dist >= minDist && dist <= maxDist) inBand.push(candidate);
+		}
+		pointB = inBand.length ? inBand[Math.floor(nextRandom() * inBand.length)] : farthest;
+	}
+
+	if (pointA) {
+		const spawnX = (ORIGIN_X + pointA[0]) * TILE_SIZE;
+		const spawnY = (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE;
+		game.map.spawns = game.map.spawns || {};
+		game.map.spawns[0] = [spawnX, spawnY, 1];
+		if (game.map.spawn) {
+			game.map.spawn.x = spawnX;
+			game.map.spawn.y = spawnY;
+		}
+		const battled = game.map.globalVars && game.map.globalVars.battled;
+		if (game.player && !game.map.refreshed && !battled) {
+			game.player.x = spawnX;
+			game.player.y = spawnY;
+		}
+	}
+
+	if (pointB) {
+		const warpX = (ORIGIN_X + pointB[0]) * TILE_SIZE;
+		const warpY = (ORIGIN_Y + pointB[1] + 1) * TILE_SIZE;
+		game.map.addObject(5, warpX, warpY, game.map.id, 0, "ev[MazeProgress]=+1&ev[MazeSeed]=0");
+	}
 
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
 		game.map.__mazeOverlay.parent.removeChild(game.map.__mazeOverlay);
@@ -422,6 +493,17 @@ game => {
 				ctx.drawImage(image, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			}
 		}
+
+		const drawDoor = (point, srcX, srcY) => {
+			if (!point) return;
+			for (let r = 0; r < 3; ++r) {
+				for (let c = 0; c < 3; ++c) {
+					ctx.drawImage(image, srcX + c * TILE_SIZE, srcY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE, (point[0] - 1 + c) * TILE_SIZE, (point[1] - 1 + r) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+				}
+			}
+		};
+		drawDoor(pointA, DOOR_A_X, DOOR_A_Y);
+		drawDoor(pointB, DOOR_B_X, DOOR_B_Y);
 
 		const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
 		sprite.position.x = ORIGIN_X * TILE_SIZE;
