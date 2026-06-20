@@ -296,7 +296,7 @@ game => {
 
 				const itemX = colCenter[cx * 2 + 1];
 				const itemY = rowCenter[cy * 2 + 1];
-				game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, chosen.uid);
+				game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [chosen.uid, 1]);
 			}
 		}
 	}
