@@ -62,9 +62,16 @@ game => {
 		open.push(new Array(gridWidth).fill(false));
 	}
 
-	const INTENSITY = 0.65;
-	const BASE_CHAOS = 0.12;
-	const PASSAGE_WIDTHS = [3, 3, 5, 7];
+	const mazeVar = (name, defaultValue) => {
+		const value = game.map.getVar ? +game.map.getVar(name, defaultValue) : defaultValue;
+		return isNaN(value) ? defaultValue : value;
+	};
+
+	const INTENSITY = mazeVar("MazeIntensity", 65) / 100;
+	const BASE_CHAOS = mazeVar("MazeBaseChaos", 12) / 100;
+	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", 7);
+	const PASSAGE_WIDTHS = [3, 3];
+	for (let width = 5; width <= MAX_PASSAGE_WIDTH; width += 2) PASSAGE_WIDTHS.push(width);
 
 	const cellKey = (cx, cy) => cy * CELLS_W + cx;
 	const inCellBounds = (cx, cy) => cx >= 0 && cx < CELLS_W && cy >= 0 && cy < CELLS_H;
