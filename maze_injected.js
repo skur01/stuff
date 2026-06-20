@@ -72,6 +72,8 @@ game => {
 		MazeBaseChaos: 12,
 		MazeMaxWidth: 7,
 		MazeEncounterSpacing: 1,
+		MazeDifficulty: 6,
+		MazeItemChance: 35,
 		overworld_encounters_max_mons: 5,
 		encounter_chance: 5
 	};
@@ -244,6 +246,57 @@ game => {
 		for (let rx = 0; rx < realCols; ++rx) {
 			if (!isFloor(rx, ry)) {
 				game.map.addObject(0, (ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE);
+			}
+		}
+	}
+
+	const buildCenters = (logicalArr) => {
+		const centers = {};
+		let runStart = 0;
+		for (let r = 1; r <= logicalArr.length; ++r) {
+			if (r === logicalArr.length || logicalArr[r] !== logicalArr[r - 1]) {
+				centers[logicalArr[r - 1]] = Math.floor((runStart + r - 1) / 2);
+				runStart = r;
+			}
+		}
+		return centers;
+	};
+	const colCenter = buildCenters(colLogical);
+	const rowCenter = buildCenters(rowLogical);
+
+	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty);
+	const ITEM_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
+	const ITEM_TABLE = [
+		{ uid: "06xa6ohm", minDifficulty: 0, baseChance: 60 },
+		{ uid: "06nsq383", minDifficulty: 3, baseChance: 30 },
+		{ uid: "06jq3b1m", minDifficulty: 6, baseChance: 15 }
+	];
+
+	const eligibleItems = ITEM_TABLE.filter(it => MAZE_DIFFICULTY >= it.minDifficulty);
+	if (eligibleItems.length) {
+		let totalItemWeight = 0;
+		for (const it of eligibleItems) totalItemWeight += it.baseChance;
+
+		for (let cy = 0; cy < CELLS_H; ++cy) {
+			for (let cx = 0; cx < CELLS_W; ++cx) {
+				let degree = 0;
+				for (const dir of DIRS) {
+					if (open[cy * 2 + 1 + dir[1]][cx * 2 + 1 + dir[0]]) ++degree;
+				}
+				if (degree !== 1) continue;
+				if (nextRandom() * 100 >= ITEM_CHANCE) continue;
+
+				let roll = nextRandom() * totalItemWeight;
+				let acc = 0;
+				let chosen = eligibleItems[eligibleItems.length - 1];
+				for (const it of eligibleItems) {
+					acc += it.baseChance;
+					if (roll < acc) { chosen = it; break; }
+				}
+
+				const itemX = colCenter[cx * 2 + 1];
+				const itemY = rowCenter[cy * 2 + 1];
+				game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, chosen.uid);
 			}
 		}
 	}
