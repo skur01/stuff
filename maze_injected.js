@@ -373,15 +373,6 @@ game => {
 		const spawnY = (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE;
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
-		if (game.map.spawn) {
-			game.map.spawn.x = spawnX;
-			game.map.spawn.y = spawnY;
-		}
-		const battled = game.map.globalVars && game.map.globalVars.battled;
-		if (game.player && !game.map.refreshed && !battled) {
-			game.player.x = spawnX;
-			game.player.y = spawnY;
-		}
 	}
 
 	if (pointB) {
