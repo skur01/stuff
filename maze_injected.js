@@ -250,6 +250,15 @@ game => {
 	}
 	game.map.overworldEncounters = overworldPoints;
 
+	const encLists = game.map.encounterLists || {};
+	const encTable = encLists[ENCOUNTER_LIST];
+	const floorPointsAdded = overworldPoints.length - game.map.__mazeBaseEncounters.length;
+	console.log("[MAZE ENCOUNTERS] floor spawn points registered:", floorPointsAdded, "| total overworldEncounters:", game.map.overworldEncounters.length);
+	console.log("[MAZE ENCOUNTERS] encounterLists keys:", Object.keys(encLists));
+	console.log("[MAZE ENCOUNTERS] '" + ENCOUNTER_LIST + "' table present:", !!encTable, "| entries:", encTable ? encTable.length : 0);
+	console.log("[MAZE ENCOUNTERS] max_mons:", mazeVar("overworld_encounters_max_mons", 5), "| encounter_chance:", mazeVar("encounter_chance", 5), "| spacing:", ENCOUNTER_SPACING);
+	if (!encTable) console.warn("[MAZE ENCOUNTERS] No '" + ENCOUNTER_LIST + "' table found on this map - set up an encounter list named '" + ENCOUNTER_LIST + "' or nothing will spawn.");
+
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
 		game.map.__mazeOverlay.parent.removeChild(game.map.__mazeOverlay);
 	}
