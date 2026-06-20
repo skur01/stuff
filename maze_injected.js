@@ -386,6 +386,7 @@ game => {
 	}
 
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
+	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
 
 	const evoLevelFor = (monObj) => {
 		if (monObj.dynamicLevel) {
@@ -399,24 +400,97 @@ game => {
 		return monObj.level || 1;
 	};
 
-	const resolveEvolvedUid = (uid, level, depth, cb) => {
+	const pickSplitEvo = (candidates) => candidates[Math.floor(Math.random() * candidates.length)];
+
+	const processEvoUid = (uid, level, depth, lastLevelEvoLvl, cb) => {
 		if (depth > 5) {
 			cb(uid);
 			return;
 		}
-		getMon(uid, resolved => {
-			const data = resolved && resolved.data;
+		getMon(uid, monObj => {
+			const data = monObj && monObj.data;
 			if (!data || !data.evolutions || !data.evolutions.length) {
 				cb(uid);
 				return;
 			}
-			const levelEvos = data.evolutions.filter(evo => evo[1] === 0 && level >= +evo[2] && (!evo[3] || evo[3] === REGION_UID));
-			if (!levelEvos.length) {
+
+			const levelCandidates = data.evolutions.filter(evo => evo[1] === 0 && level >= +evo[2] && (!evo[3] || evo[3] === REGION_UID));
+			const nonLevelCandidates = data.evolutions.filter(evo => evo[1] !== 35 && evo[1] !== 0 && (!evo[3] || evo[3] === REGION_UID));
+
+			let evoTarget = null;
+			let evoLevel = null;
+			let isLevelEvo = false;
+
+			const pickLevel = () => {
+				if (levelCandidates.length) {
+					const picked = pickSplitEvo(levelCandidates);
+					evoTarget = picked[0];
+					evoLevel = +picked[2];
+					isLevelEvo = true;
+				}
+			};
+
+			const pickNonLevel = () => {
+				if (nonLevelCandidates.length === 1) {
+					evoTarget = nonLevelCandidates[0][0];
+				} else if (nonLevelCandidates.length > 1) {
+					const methodGroups = {};
+					for (const evo of nonLevelCandidates) {
+						if (!methodGroups[evo[1]]) methodGroups[evo[1]] = [];
+						methodGroups[evo[1]].push(evo);
+					}
+					const splitGroup = Object.values(methodGroups).find(g => g.length > 1);
+					evoTarget = pickSplitEvo(splitGroup || nonLevelCandidates)[0];
+				}
+			};
+
+			if (AUTO_EVOLVE === 3) {
+				const allCandidates = levelCandidates.concat(nonLevelCandidates);
+				if (allCandidates.length) {
+					const picked = pickSplitEvo(allCandidates);
+					evoTarget = picked[0];
+					if (picked[1] === 0) {
+						evoLevel = +picked[2];
+						isLevelEvo = true;
+					}
+				}
+			} else if (AUTO_EVOLVE === 4) {
+				pickLevel();
+			} else if (AUTO_EVOLVE === 2) {
+				pickNonLevel();
+				if (!evoTarget) pickLevel();
+			} else {
+				pickLevel();
+				if (!evoTarget && nonLevelCandidates.length) evoTarget = nonLevelCandidates[0][0];
+			}
+
+			if (!evoTarget) {
 				cb(uid);
 				return;
 			}
-			const nextUid = levelEvos[Math.floor(Math.random() * levelEvos.length)][0];
-			resolveEvolvedUid(nextUid, level, depth + 1, cb);
+
+			getMon(evoTarget, evolved => {
+				if (!evolved || !evolved.data) {
+					cb(uid);
+					return;
+				}
+
+				if (!isLevelEvo) {
+					if (lastLevelEvoLvl !== null) {
+						evoLevel = lastLevelEvoLvl + 20;
+					} else {
+						const hasNextEvo = evolved.data.evolutions && evolved.data.evolutions.length > 0;
+						evoLevel = depth >= 1 ? 38 : (hasNextEvo ? 20 : 31);
+					}
+				}
+
+				if (level < evoLevel) {
+					cb(uid);
+					return;
+				}
+
+				processEvoUid(evoTarget, level, depth + 1, isLevelEvo ? evoLevel : lastLevelEvoLvl, cb);
+			});
 		});
 	};
 
@@ -428,7 +502,7 @@ game => {
 				const self = this;
 				const baseUid = mon.split(";")[0];
 				getMon(mon, monObj => {
-					resolveEvolvedUid(baseUid, evoLevelFor(monObj), 0, evolvedUid => {
+					processEvoUid(baseUid, evoLevelFor(monObj), 0, null, evolvedUid => {
 						let finalMon = mon;
 						if (evolvedUid && evolvedUid !== baseUid) {
 							const parts = mon.split(";");
