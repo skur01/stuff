@@ -233,6 +233,23 @@ game => {
 		}
 	}
 
+	const ENCOUNTER_LIST = "encounters";
+	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", 2));
+
+	if (typeof game.map.__mazeBaseEncounters === "undefined") {
+		game.map.__mazeBaseEncounters = (game.map.overworldEncounters || []).slice();
+	}
+
+	const overworldPoints = game.map.__mazeBaseEncounters.slice();
+	for (let ry = 0; ry < realRows; ry += ENCOUNTER_SPACING) {
+		for (let rx = 0; rx < realCols; rx += ENCOUNTER_SPACING) {
+			if (isFloor(rx, ry)) {
+				overworldPoints.push([(ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, ENCOUNTER_LIST]);
+			}
+		}
+	}
+	game.map.overworldEncounters = overworldPoints;
+
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
 		game.map.__mazeOverlay.parent.removeChild(game.map.__mazeOverlay);
 	}
