@@ -378,7 +378,10 @@ game => {
 	if (pointB) {
 		const warpX = (ORIGIN_X + pointB[0]) * TILE_SIZE;
 		const warpY = (ORIGIN_Y + pointB[1] + 1) * TILE_SIZE;
-		game.map.addObject(5, warpX, warpY, game.map.id, 0, "ev[MazeProgress]=+1&ev[MazeSeed]=0");
+		const prevOntile = game.map.ontile;
+		game.map.ontile = "any";
+		game.map.addObject(7, warpX, warpY, "ev[MazeProgress]=+1&ev[MazeSeed]=0&warp=" + game.map.id + ",0");
+		game.map.ontile = prevOntile;
 	}
 
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
@@ -485,16 +488,24 @@ game => {
 			}
 		}
 
-		const drawDoor = (point, srcX, srcY) => {
+		const drawDoor = (point, srcX, srcY, tint) => {
 			if (!point) return;
+			const baseX = (point[0] - 1) * TILE_SIZE;
+			const baseY = (point[1] - 1) * TILE_SIZE;
 			for (let r = 0; r < 3; ++r) {
 				for (let c = 0; c < 3; ++c) {
-					ctx.drawImage(image, srcX + c * TILE_SIZE, srcY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE, (point[0] - 1 + c) * TILE_SIZE, (point[1] - 1 + r) * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+					ctx.drawImage(image, srcX + c * TILE_SIZE, srcY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE, baseX + c * TILE_SIZE, baseY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 				}
 			}
+			if (tint) {
+				ctx.globalCompositeOperation = "source-atop";
+				ctx.fillStyle = tint;
+				ctx.fillRect(baseX, baseY, 3 * TILE_SIZE, 3 * TILE_SIZE);
+				ctx.globalCompositeOperation = "source-over";
+			}
 		};
-		drawDoor(pointA, DOOR_A_X, DOOR_A_Y);
-		drawDoor(pointB, DOOR_B_X, DOOR_B_Y);
+		drawDoor(pointA, DOOR_A_X, DOOR_A_Y, null);
+		drawDoor(pointB, DOOR_B_X, DOOR_B_Y, "rgba(220,40,40,0.55)");
 
 		const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
 		sprite.position.x = ORIGIN_X * TILE_SIZE;
