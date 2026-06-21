@@ -7,13 +7,14 @@ game => {
 	const ORIGIN_X = 0;
 	const ORIGIN_Y = 0;
 	const TILESET_NAME = "094m58vi";
+	const WALL_TILESET_NAME = "091pgtm0";
 	const EXIT_MAP = "08t5fzij";
 	const FLOOR_X = 32;
 	const FLOOR_Y = 1328;
 	const GRASS_X = 32;
 	const GRASS_Y = 1328;
-	const OBSTACLE_X = 32;
-	const OBSTACLE_Y = 1328;
+	const WALL_X = 32;
+	const WALL_Y = 2224;
 	const DOOR_A_X = 176;
 	const DOOR_A_Y = 2384;
 	const DOOR_B_X = 176;
@@ -97,7 +98,7 @@ game => {
 		FieldClusterMin: 2,
 		FieldClusterMax: 5,
 		MazeDifficulty: 6,
-		MazeItemChance: 35,
+		MazeItemChance: 4,
 		MazeRoomDensity: 15,
 		autoevolve_all: 1,
 		overworld_encounters_max_mons: 5,
@@ -331,8 +332,9 @@ game => {
 	}
 
 	const tilesetUrl = CDN_BASE + "images/tilesets/" + TILESET_NAME + ".webp?t=" + getCache(TILESET_NAME);
+	const wallTilesetUrl = CDN_BASE + "images/tilesets/" + WALL_TILESET_NAME + ".webp?t=" + getCache(WALL_TILESET_NAME);
 
-	const drawOverlay = (image) => {
+	const drawOverlay = (image, wallImage) => {
 		const canvas = document.createElement("canvas");
 		canvas.width = realCols * TILE_SIZE;
 		canvas.height = realRows * TILE_SIZE;
@@ -346,7 +348,7 @@ game => {
 				ctx.drawImage(image, FLOOR_X, FLOOR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 
 				if (obstacle[ry][rx]) {
-					ctx.drawImage(image, OBSTACLE_X, OBSTACLE_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+					ctx.drawImage(wallImage, WALL_X, WALL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 				} else if (grass[ry][rx]) {
 					ctx.drawImage(image, GRASS_X, GRASS_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 				}
@@ -358,7 +360,7 @@ game => {
 			const baseY = (ry - 1) * TILE_SIZE;
 			for (let r = 0; r < 3; ++r) {
 				for (let c = 0; c < 3; ++c) {
-					ctx.drawImage(image, srcX + c * TILE_SIZE, srcY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE, baseX + c * TILE_SIZE, baseY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+					ctx.drawImage(wallImage, srcX + c * TILE_SIZE, srcY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE, baseX + c * TILE_SIZE, baseY + r * TILE_SIZE, TILE_SIZE, TILE_SIZE);
 				}
 			}
 			if (tint) {
@@ -382,16 +384,21 @@ game => {
 		revealMaze();
 	};
 
-	const loaded = game.assets.get(tilesetUrl);
-	if (loaded) {
-		drawOverlay(loaded);
+	const tryDraw = () => {
+		if (game.map.id !== mazeMapId) return;
+		const floorImage = game.assets.get(tilesetUrl);
+		const wallImage = game.assets.get(wallTilesetUrl);
+		if (floorImage && wallImage) drawOverlay(floorImage, wallImage);
+	};
+
+	const floorLoaded = game.assets.get(tilesetUrl);
+	const wallLoaded = game.assets.get(wallTilesetUrl);
+	if (floorLoaded && wallLoaded) {
+		drawOverlay(floorLoaded, wallLoaded);
 	} else {
-		game.assets.add(tilesetUrl).load(() => {
-			if (game.map.id !== mazeMapId) return;
-			const image = game.assets.get(tilesetUrl);
-			if (image) drawOverlay(image);
-			else revealMaze();
-		});
+		if (!floorLoaded) game.assets.add(tilesetUrl).load(tryDraw);
+		if (!wallLoaded) game.assets.add(wallTilesetUrl).load(tryDraw);
+		if (floorLoaded || wallLoaded) tryDraw();
 	}
 }
 )(game);
