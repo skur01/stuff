@@ -59,18 +59,23 @@ game => {
 		game.__mazeFadePatched = true;
 		const origFade = game.fade;
 		game.fade = function(opacity, color, cb) {
-			if (opacity === 0 && game.__mazeFadeHold) return;
+			if (opacity === 0 && game.__mazeFadeHold) {
+				console.log("[MAZE] fade-in suppressed (hold active)");
+				return;
+			}
 			return origFade.call(this, opacity, color, cb);
 		};
 	}
 	game.__mazeFadeHold = true;
 	game.fade(1, "#000");
+	console.log("[MAZE] inject start | render=" + game.render + " | id=" + game.map.id + " | cachedid=" + game.map.__cachedid + " | player=" + game.player.x + "," + game.player.y);
 
 	const revealMaze = () => {
 		if (!game.render) {
 			setTimeout(revealMaze, 50);
 			return;
 		}
+		console.log("[MAZE] reveal | render=" + game.render + " | fading in");
 		game.__mazeFadeHold = false;
 		game.fade(0);
 	};
@@ -406,6 +411,9 @@ game => {
 		const spawnY = (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE;
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
+		console.log("[MAZE] spawnA set | spawns[0]=" + JSON.stringify(game.map.spawns[0]) + " | candidates=" + doorCandidates.length + " | render=" + game.render + " | player=" + game.player.x + "," + game.player.y);
+	} else {
+		console.log("[MAZE] spawnA NOT set | doorCandidates=" + doorCandidates.length);
 	}
 
 	if (pointB) {
