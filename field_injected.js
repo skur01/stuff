@@ -33,7 +33,6 @@ game => {
 	const INNER_BL_Y = 2288;
 	const INNER_BR_X = 112;
 	const INNER_BR_Y = 2288;
-	const WALL_SCALE = 1;
 	const DOOR_A_X = 176;
 	const DOOR_A_Y = 2384;
 	const DOOR_B_X = 176;
@@ -112,7 +111,7 @@ game => {
 	const MAZE_DEFAULTS = {
 		MazeIntensity: 65,
 		MazeBaseChaos: 12,
-		FieldOpenDensity: 55,
+		FieldWallDensity: 16,
 		FieldGrassDensity: 18,
 		FieldClusterMin: 6,
 		FieldClusterMax: 14,
@@ -135,7 +134,7 @@ game => {
 	const LAB_PROGRESS = game.map.mapVars.LabProgressActive;
 
 	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + LAB_PROGRESS * 10) / 100;
-	const OPEN_DENSITY = mazeVar("FieldOpenDensity", MAZE_DEFAULTS.FieldOpenDensity) * Math.max(0.3, 1 - INTENSITY * 0.5) / 100;
+	const WALL_DENSITY = mazeVar("FieldWallDensity", MAZE_DEFAULTS.FieldWallDensity) * (1 + INTENSITY) / 100;
 	const GRASS_DENSITY = mazeVar("FieldGrassDensity", MAZE_DEFAULTS.FieldGrassDensity) / 100;
 	const CLUSTER_MIN = Math.max(1, mazeVar("FieldClusterMin", MAZE_DEFAULTS.FieldClusterMin));
 	const CLUSTER_MAX = Math.max(CLUSTER_MIN, mazeVar("FieldClusterMax", MAZE_DEFAULTS.FieldClusterMax));
@@ -145,15 +144,15 @@ game => {
 
 	const obstacle = [];
 	for (let ry = 0; ry < realRows; ++ry) {
-		obstacle.push(new Array(realCols).fill(true));
+		obstacle.push(new Array(realCols).fill(false));
 	}
 
 	const inBounds = (rx, ry) => rx >= 0 && ry >= 0 && rx < realCols && ry < realRows;
 	const BORDER = 2;
 	const DIRS4 = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
-	const carveClearing = (cx, cy) => {
-		const carved = [];
+	const placeChunk = (cx, cy) => {
+		const placed = [];
 		const size = CLUSTER_MIN + Math.floor(nextRandom() * (CLUSTER_MAX - CLUSTER_MIN + 1));
 		let frontier = [[cx, cy]];
 		for (let s = 0; s < size && frontier.length; ++s) {
@@ -161,25 +160,25 @@ game => {
 			const next = frontier.splice(idx, 1)[0];
 			const px = next[0];
 			const py = next[1];
-			if (!inBounds(px, py) || !obstacle[py][px]) continue;
-			obstacle[py][px] = false;
-			carved.push([px, py]);
+			if (!inBounds(px, py) || obstacle[py][px]) continue;
+			obstacle[py][px] = true;
+			placed.push([px, py]);
 			for (const dir of DIRS4) {
 				const nx = px + dir[0];
 				const ny = py + dir[1];
-				if (inBounds(nx, ny) && obstacle[ny][nx]) frontier.push([nx, ny]);
+				if (inBounds(nx, ny) && !obstacle[ny][nx]) frontier.push([nx, ny]);
 			}
 		}
-		return carved;
+		return placed;
 	};
 
-	const clearingAttempts = Math.round(realCols * realRows * OPEN_DENSITY / ((CLUSTER_MIN + CLUSTER_MAX) / 2));
-	const carvedClearings = [];
-	for (let a = 0; a < clearingAttempts; ++a) {
+	const chunkAttempts = Math.round(realCols * realRows * WALL_DENSITY / ((CLUSTER_MIN + CLUSTER_MAX) / 2));
+	const placedChunks = [];
+	for (let a = 0; a < chunkAttempts; ++a) {
 		const cx = BORDER + Math.floor(nextRandom() * (realCols - BORDER * 2));
 		const cy = BORDER + Math.floor(nextRandom() * (realRows - BORDER * 2));
-		if (!obstacle[cy][cx]) continue;
-		carvedClearings.push(carveClearing(cx, cy));
+		if (obstacle[cy][cx]) continue;
+		placedChunks.push(placeChunk(cx, cy));
 	}
 
 	const isWalkable = (rx, ry) => inBounds(rx, ry) && !obstacle[ry][rx];
@@ -212,16 +211,15 @@ game => {
 	const exitRX = realCols - 1 - BORDER;
 	const exitRY = Math.floor(realRows / 2);
 
+	while (!hasPath(spawnRX, spawnRY, exitRX, exitRY) && placedChunks.length) {
+		const offending = placedChunks.pop();
+		for (let i = 0; i < offending.length; ++i) {
+			obstacle[offending[i][1]][offending[i][0]] = false;
+		}
+	}
+
 	obstacle[spawnRY][spawnRX] = false;
 	obstacle[exitRY][exitRX] = false;
-
-	let connectAttempts = 0;
-	while (!hasPath(spawnRX, spawnRY, exitRX, exitRY) && connectAttempts < clearingAttempts) {
-		const cx = BORDER + Math.floor(nextRandom() * (realCols - BORDER * 2));
-		const cy = BORDER + Math.floor(nextRandom() * (realRows - BORDER * 2));
-		if (obstacle[cy][cx]) carvedClearings.push(carveClearing(cx, cy));
-		++connectAttempts;
-	}
 
 	const grass = [];
 	for (let ry = 0; ry < realRows; ++ry) {
@@ -378,89 +376,98 @@ game => {
 			}
 		}
 
-		const isWall = (rx, ry) => inBounds(rx, ry) && obstacle[ry][rx];
-		const isWallFace = (rx, ry) => {
-			if (rx < 0 || ry < 0 || rx >= realCols || ry >= realRows) return false;
-			if (isWall(rx, ry)) return false;
-			return isWall(rx - 1, ry) || isWall(rx + 1, ry) || isWall(rx, ry - 1) || isWall(rx, ry + 1);
+		const isFloorF = (rx, ry) => !inBounds(rx, ry) ? true : !obstacle[ry][rx];
+		const isWallF = (rx, ry) => inBounds(rx, ry) && obstacle[ry][rx];
+		const isFaceF = (rx, ry) => {
+			if (!isWallF(rx, ry)) return false;
+			return isFloorF(rx - 1, ry) || isFloorF(rx + 1, ry) || isFloorF(rx, ry - 1) || isFloorF(rx, ry + 1);
 		};
 
-		const wallSize = TILE_SIZE * WALL_SCALE;
-		const wallOffset = (wallSize - TILE_SIZE) / 2;
+		const convexCorners = [];
+		const bottomCorners = [];
 
 		for (let ry = 0; ry < realRows; ++ry) {
 			for (let rx = 0; rx < realCols; ++rx) {
 				if (!obstacle[ry][rx]) continue;
 
-				const dx = rx * TILE_SIZE - wallOffset;
-				const dy = ry * TILE_SIZE - wallOffset;
+				const dx = rx * TILE_SIZE;
+				const dy = ry * TILE_SIZE;
 
-				const wallLeft = isWall(rx - 1, ry);
-				const wallRight = isWall(rx + 1, ry);
-				const wallUp = isWall(rx, ry - 1);
-				const wallDown = isWall(rx, ry + 1);
+				const floorLeft = isFloorF(rx - 1, ry);
+				const floorRight = isFloorF(rx + 1, ry);
+				const floorUp = isFloorF(rx, ry - 1);
+				const floorDown = isFloorF(rx, ry + 1);
 
-				if (!wallLeft && !wallRight && !wallUp && !wallDown) {
-					const faceLeft = isWallFace(rx - 1, ry);
-					const faceRight = isWallFace(rx + 1, ry);
-					const faceUp = isWallFace(rx, ry - 1);
-					const faceDown = isWallFace(rx, ry + 1);
+				if (!floorLeft && !floorRight && !floorUp && !floorDown) {
+					const faceLeft = isFaceF(rx - 1, ry);
+					const faceRight = isFaceF(rx + 1, ry);
+					const faceUp = isFaceF(rx, ry - 1);
+					const faceDown = isFaceF(rx, ry + 1);
 
-					if (faceDown && faceRight && isWall(rx + 1, ry + 1)) {
-						ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx, dy - wallOffset, wallSize, wallSize);
-						ctx.drawImage(wallImage, WALL_CORNER_BR_X, WALL_CORNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-					} else if (faceDown && faceLeft && isWall(rx - 1, ry + 1)) {
-						ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx, dy - wallOffset, wallSize, wallSize);
-						ctx.drawImage(wallImage, WALL_CORNER_BL_X, WALL_CORNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-					} else if (faceUp && faceRight && isWall(rx + 1, ry - 1)) {
-						ctx.drawImage(wallImage, BOTTOM_CORNER_L_X, BOTTOM_CORNER_L_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-					} else if (faceUp && faceLeft && isWall(rx - 1, ry - 1)) {
-						ctx.drawImage(wallImage, BOTTOM_CORNER_R_X, BOTTOM_CORNER_R_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+					if (faceDown && faceRight && isFloorF(rx + 1, ry + 1)) {
+						convexCorners.push([dx, dy, true]);
+					} else if (faceDown && faceLeft && isFloorF(rx - 1, ry + 1)) {
+						convexCorners.push([dx, dy, false]);
+					} else if (faceUp && faceRight && isFloorF(rx + 1, ry - 1)) {
+						bottomCorners.push([dx, dy, true]);
+					} else if (faceUp && faceLeft && isFloorF(rx - 1, ry - 1)) {
+						bottomCorners.push([dx, dy, false]);
 					} else {
 						const col = faceLeft ? 2 : (faceRight ? 0 : 1);
 						const row = faceUp ? 2 : (faceDown ? 0 : 1);
 						if (col === 2 && row === 2) {
-							ctx.drawImage(wallImage, INNER_TL_X, INNER_TL_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+							ctx.drawImage(wallImage, INNER_TL_X, INNER_TL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						} else if (col === 0 && row === 2) {
-							ctx.drawImage(wallImage, INNER_TR_X, INNER_TR_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+							ctx.drawImage(wallImage, INNER_TR_X, INNER_TR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						} else if (col === 2 && row === 0) {
-							ctx.drawImage(wallImage, INNER_BL_X, INNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+							ctx.drawImage(wallImage, INNER_BL_X, INNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						} else if (col === 0 && row === 0) {
-							ctx.drawImage(wallImage, INNER_BR_X, INNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+							ctx.drawImage(wallImage, INNER_BR_X, INNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						} else {
-							ctx.drawImage(wallImage, VOID_BLOCK_X + col * TILE_SIZE, VOID_BLOCK_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+							ctx.drawImage(wallImage, VOID_BLOCK_X + col * TILE_SIZE, VOID_BLOCK_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						}
 					}
-					continue;
+				} else {
+					const col = floorLeft ? 0 : (floorRight ? 2 : 1);
+					const row = floorUp ? 0 : (floorDown ? 2 : 1);
+					ctx.drawImage(wallImage, WALL_AUTOTILE_X + col * TILE_SIZE, WALL_AUTOTILE_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 				}
-
-				const col = wallLeft ? 0 : (wallRight ? 2 : 1);
-				const row = wallUp ? 0 : (wallDown ? 2 : 1);
-				ctx.drawImage(wallImage, WALL_AUTOTILE_X + col * TILE_SIZE, WALL_AUTOTILE_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
 			}
 		}
 
-		for (let ry = 0; ry < realRows; ++ry) {
-			for (let rx = 0; rx < realCols; ++rx) {
-				if (isWall(rx, ry) || !isWallFace(rx, ry)) continue;
+		for (const corner of convexCorners) {
+			const dx = corner[0];
+			const dy = corner[1];
+			const isRight = corner[2];
 
-				const dx = rx * TILE_SIZE - wallOffset;
-				const dy = ry * TILE_SIZE - wallOffset;
+			ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
 
-				const faceRight = isWall(rx + 1, ry);
-				const faceLeft = isWall(rx - 1, ry);
-				const faceDown = isWall(rx, ry + 1);
-				const faceUp = isWall(rx, ry - 1);
+			if (isRight) {
+				ctx.drawImage(wallImage, WALL_CORNER_BR_X, WALL_CORNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
+			} else {
+				ctx.drawImage(wallImage, WALL_CORNER_BL_X, WALL_CORNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
+			}
+		}
 
-				if (faceDown && faceRight && isWall(rx + 1, ry + 1)) {
-					ctx.drawImage(wallImage, WALL_CORNER_BR_X, WALL_CORNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-				} else if (faceDown && faceLeft && isWall(rx - 1, ry + 1)) {
-					ctx.drawImage(wallImage, WALL_CORNER_BL_X, WALL_CORNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-				} else if (faceUp && faceRight && isWall(rx + 1, ry - 1)) {
-					ctx.drawImage(wallImage, BOTTOM_CORNER_L_X, BOTTOM_CORNER_L_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-				} else if (faceUp && faceLeft && isWall(rx - 1, ry - 1)) {
-					ctx.drawImage(wallImage, BOTTOM_CORNER_R_X, BOTTOM_CORNER_R_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
-				}
+		for (const corner of bottomCorners) {
+			const dx = corner[0];
+			const dy = corner[1];
+			const isRight = corner[2];
+
+			ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+			if (isRight) {
+				ctx.drawImage(wallImage, BOTTOM_CORNER_L_X, BOTTOM_CORNER_L_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
+			} else {
+				ctx.drawImage(wallImage, BOTTOM_CORNER_R_X, BOTTOM_CORNER_R_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
+				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			}
 		}
 
