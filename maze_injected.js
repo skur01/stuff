@@ -430,6 +430,39 @@ game => {
 		game.map.ontile = prevOntile;
 	}
 
+	if (game.map.__mazeGlitches) {
+		for (let g = 0; g < game.map.__mazeGlitches.length; ++g) {
+			const old = game.objects.get(game.map.__mazeGlitches[g]);
+			if (old) old.remove();
+		}
+	}
+	game.map.__mazeGlitches = [];
+
+	const SIM_STABILITY = mazeVar("simstability", 100);
+	if (SIM_STABILITY < 50) {
+		const glitchImpassable = SIM_STABILITY < 26;
+		const glitchChance = glitchImpassable ? 3 : 6;
+		const glitchMsg = "It's a glitch. Seems like it's appeared from the simulation degrading. It's completely impasable.";
+		let glitchIndex = 0;
+		for (let cy = 0; cy < CELLS_H; ++cy) {
+			for (let cx = 0; cx < CELLS_W; ++cx) {
+				if (nextRandom() * 100 >= glitchChance) continue;
+				const uid = "mazeGlitch" + glitchIndex++;
+				const px = (ORIGIN_X + colCenter[cx * 2 + 1]) * TILE_SIZE;
+				const py = (ORIGIN_Y + rowCenter[cy * 2 + 1]) * TILE_SIZE;
+				game.map.addObject(9, px, py, uid, "4543/glitcheffect", "fore", 0, 0, 20, 20, 32, 60, -1);
+				game.map.addObject(10, 0, uid, "5x5x5x5");
+				game.map.addObject(10, 5, uid, 1);
+				if (glitchImpassable) {
+					game.map.addObject(1, uid, glitchMsg, "");
+				} else {
+					game.map.addObject(10, 14, uid, 20);
+				}
+				game.map.__mazeGlitches.push(uid);
+			}
+		}
+	}
+
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
 	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
 
@@ -553,9 +586,6 @@ game => {
 		if (typeof origAddOverworldMon === "function") {
 			game.map.addOverworldMon = function(attr, mon, battleAttr) {
 				const self = this;
-				if (battleAttr && battleAttr.length >= 4) {
-					battleAttr[3] = (battleAttr[3] ? battleAttr[3] + ";" : "") + "nocatch;norun";
-				}
 				const level = rollEncounterLevel();
 				const leveledMon = setMonLevel(mon, level);
 				const baseUid = leveledMon.split(";")[0];
