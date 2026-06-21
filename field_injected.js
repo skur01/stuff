@@ -23,8 +23,6 @@ game => {
 	const BOTTOM_CORNER_L_Y = 2240;
 	const BOTTOM_CORNER_R_X = 96;
 	const BOTTOM_CORNER_R_Y = 2240;
-	const VOID_BLOCK_X = 64;
-	const VOID_BLOCK_Y = 2288;
 	const INNER_TL_X = 128;
 	const INNER_TL_Y = 2304;
 	const INNER_TR_X = 112;
@@ -91,7 +89,6 @@ game => {
 		const tick = str => {
 			if (!document.hidden) game.trigger(str);
 		};
-		INTERVAL[0] = setInterval(() => tick("var[simstability]=-1"), 13000);
 		INTERVAL[1] = setInterval(() => tick("var[runMinute]=+1"), 60000);
 	}
 
@@ -292,40 +289,6 @@ game => {
 		}
 	}
 
-	if (game.map.__mazeGlitches) {
-		for (let g = 0; g < game.map.__mazeGlitches.length; ++g) {
-			const old = game.objects.get(game.map.__mazeGlitches[g]);
-			if (old) old.remove();
-		}
-	}
-	game.map.__mazeGlitches = [];
-
-	const SIM_STABILITY = mazeVar("simstability", 100);
-	if (SIM_STABILITY < 50) {
-		const glitchImpassable = SIM_STABILITY < 26;
-		const glitchChance = glitchImpassable ? 3 : 6;
-		const glitchMsg = "It's a glitch. Seems like it's appeared from the simulation degrading. It's completely impasable.";
-		let glitchIndex = 0;
-		for (let ry = 0; ry < realRows; ++ry) {
-			for (let rx = 0; rx < realCols; ++rx) {
-				if (!isWalkable(rx, ry)) continue;
-				if (nextRandom() * 100 >= glitchChance) continue;
-				const uid = "fieldGlitch" + glitchIndex++;
-				const px = (ORIGIN_X + rx) * TILE_SIZE;
-				const py = (ORIGIN_Y + ry) * TILE_SIZE;
-				game.map.addObject(9, px, py, uid, "4543/glitcheffect", "fore", 0, 0, 20, 20, 32, 60, -1);
-				game.map.addObject(10, 0, uid, "5x5x5x5");
-				game.map.addObject(10, 5, uid, 1);
-				if (glitchImpassable) {
-					game.map.addObject(1, uid, glitchMsg, "");
-				} else {
-					game.map.addObject(10, 14, uid, 20);
-				}
-				game.map.__mazeGlitches.push(uid);
-			}
-		}
-	}
-
 	const spawnX = (ORIGIN_X + spawnRX) * TILE_SIZE;
 	const spawnY = (ORIGIN_Y + spawnRY) * TILE_SIZE;
 	game.map.spawns = game.map.spawns || {};
@@ -442,7 +405,7 @@ game => {
 						} else if (col === 0 && row === 0) {
 							ctx.drawImage(wallImage, INNER_BR_X, INNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						} else {
-							ctx.drawImage(wallImage, VOID_BLOCK_X + col * TILE_SIZE, VOID_BLOCK_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+							ctx.drawImage(wallImage, WALL_AUTOTILE_X + TILE_SIZE, WALL_AUTOTILE_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 						}
 					}
 				} else {
@@ -458,16 +421,10 @@ game => {
 			const dy = corner[1];
 			const isRight = corner[2];
 
-			ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
 			if (isRight) {
 				ctx.drawImage(wallImage, WALL_CORNER_BR_X, WALL_CORNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			} else {
 				ctx.drawImage(wallImage, WALL_CORNER_BL_X, WALL_CORNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy - TILE_SIZE, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			}
 		}
 
@@ -476,16 +433,10 @@ game => {
 			const dy = corner[1];
 			const isRight = corner[2];
 
-			ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
-
 			if (isRight) {
 				ctx.drawImage(wallImage, BOTTOM_CORNER_L_X, BOTTOM_CORNER_L_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx - TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			} else {
 				ctx.drawImage(wallImage, BOTTOM_CORNER_R_X, BOTTOM_CORNER_R_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + 2 * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy + TILE_SIZE, TILE_SIZE, TILE_SIZE);
-				ctx.drawImage(wallImage, VOID_BLOCK_X + 2 * TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx + TILE_SIZE, dy, TILE_SIZE, TILE_SIZE);
 			}
 		}
 
