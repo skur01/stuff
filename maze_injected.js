@@ -89,6 +89,14 @@ game => {
 		game.fade(0);
 	};
 
+	if (!game.map.updating) {
+		const tick = str => {
+			if (!document.hidden) game.trigger(str);
+		};
+		INTERVAL[0] = setInterval(() => tick("var[simstability]=-1"), 13000);
+		INTERVAL[1] = setInterval(() => tick("var[runMinute]=+1"), 60000);
+	}
+
 	let rngState = seed >>> 0;
 	const nextRandom = () => {
 		rngState = (rngState + 0x6D2B79F5) | 0;
@@ -366,6 +374,7 @@ game => {
 		}
 	}
 
+	/* OVERWORLD ENCOUNTERS DISABLED - restore later
 	const ENCOUNTER_LIST = "encounters";
 	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", MAZE_DEFAULTS.MazeEncounterSpacing));
 	const keepChance = 1 / (ENCOUNTER_SPACING * ENCOUNTER_SPACING);
@@ -383,6 +392,7 @@ game => {
 		}
 	}
 	game.map.overworldEncounters = overworldPoints;
+	*/
 
 	const doorCandidates = [];
 	for (let ry = 2; ry < realRows - 2; ++ry) {
@@ -484,6 +494,7 @@ game => {
 		}
 	}
 
+	/* OVERWORLD ENCOUNTER MON LEVELING/EVOLUTION DISABLED - restore later
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
 	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
 
@@ -622,6 +633,7 @@ game => {
 			};
 		}
 	}
+	*/
 
 	if (!game.map.reset.__mazeWrapped) {
 		const origReset = game.map.reset;
