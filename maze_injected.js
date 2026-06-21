@@ -70,7 +70,10 @@ game => {
 	game.fade(1, "#000");
 	console.log("[MAZE] inject start | render=" + game.render + " | id=" + game.map.id + " | cachedid=" + game.map.__cachedid + " | player=" + game.player.x + "," + game.player.y);
 
+	const mazeMapId = game.map.id;
+
 	const revealMaze = () => {
+		if (game.map.id !== mazeMapId) return;
 		if (!game.render) {
 			setTimeout(revealMaze, 50);
 			return;
@@ -414,6 +417,7 @@ game => {
 		if (!game.map.mapVars.MazeSpawned) {
 			game.map.mapVars.MazeSpawned = 1;
 			const applySpawn = () => {
+				if (game.map.id !== mazeMapId) return;
 				if (!game.render) {
 					setTimeout(applySpawn, 50);
 					return;
@@ -618,6 +622,7 @@ game => {
 				this.__mazeOverlay.destroy({ children: true, texture: true, baseTexture: true });
 				this.__mazeOverlay = null;
 			}
+			this.game.__mazeFadeHold = false;
 			return origReset.apply(this, arguments);
 		};
 		wrappedReset.__mazeWrapped = true;
@@ -763,6 +768,7 @@ game => {
 		drawOverlay(loaded);
 	} else {
 		game.assets.add(tilesetUrl).load(() => {
+			if (game.map.id !== mazeMapId) return;
 			const image = game.assets.get(tilesetUrl);
 			if (image) drawOverlay(image);
 			else revealMaze();
