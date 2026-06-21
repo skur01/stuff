@@ -411,6 +411,9 @@ game => {
 		const spawnY = (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE;
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
+		if (game.render) {
+			game.player.setPosition(spawnX, spawnY);
+		}
 		console.log("[MAZE] spawnA set | spawns[0]=" + JSON.stringify(game.map.spawns[0]) + " | candidates=" + doorCandidates.length + " | render=" + game.render + " | player=" + game.player.x + "," + game.player.y);
 	} else {
 		console.log("[MAZE] spawnA NOT set | doorCandidates=" + doorCandidates.length);
