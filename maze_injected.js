@@ -37,10 +37,16 @@ game => {
 	const DOOR_B_X = 176;
 	const DOOR_B_Y = 2384;
 
-	let seed = game.map.eventVars["MazeSeed"] || 0;
+	game.map.mapVars = game.map.mapVars || {};
+
+	let seed = game.map.mapVars.MazeSeedActive || 0;
 	if (!seed) {
-		seed = (Math.random() * 0xFFFFFFFF >>> 0) || 1;
-		game.trigger("ev[MazeSeed]=" + seed);
+		seed = game.map.eventVars["MazeSeed"] || 0;
+		if (!seed) {
+			seed = (Math.random() * 0xFFFFFFFF >>> 0) || 1;
+			game.trigger("ev[MazeSeed]=" + seed);
+		}
+		game.map.mapVars.MazeSeedActive = seed;
 	}
 
 	if (typeof game.map.eventVars["LabRunProgress"] === "undefined") {
@@ -126,7 +132,10 @@ game => {
 		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
 	}
 
-	const LAB_PROGRESS = mazeVar("LabRunProgress", 0);
+	if (typeof game.map.mapVars.LabProgressActive === "undefined") {
+		game.map.mapVars.LabProgressActive = mazeVar("LabRunProgress", 0);
+	}
+	const LAB_PROGRESS = game.map.mapVars.LabProgressActive;
 	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + LAB_PROGRESS * 10) / 100;
 	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + LAB_PROGRESS * 5) / 100;
 	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
@@ -433,7 +442,7 @@ game => {
 
 	if (pointB) {
 		const warpX = (ORIGIN_X + pointB[0]) * TILE_SIZE;
-		const warpY = (ORIGIN_Y + pointB[1] + 1) * TILE_SIZE;
+		const warpY = (ORIGIN_Y + pointB[1]) * TILE_SIZE;
 		const exitMod = LAB_PROGRESS % 6;
 		const exitSpawn = exitMod === 2 ? 2 : (exitMod === 5 ? 3 : 1);
 		const prevOntile = game.map.ontile;
