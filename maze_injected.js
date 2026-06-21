@@ -9,6 +9,7 @@ game => {
 	const ORIGIN_X = 0;
 	const ORIGIN_Y = 0;
 	const TILESET_NAME = "091pgtm0";
+	const EXIT_MAP = "08t5fzij";
 	const FLOOR_AUTOTILE_X = 16;
 	const FLOOR_AUTOTILE_Y = 2256;
 	const WALL_AUTOTILE_X = 16;
@@ -42,8 +43,8 @@ game => {
 		game.trigger("ev[MazeSeed]=" + seed);
 	}
 
-	if (typeof game.map.eventVars["MazeProgress"] === "undefined") {
-		game.trigger("ev[MazeProgress]=0");
+	if (typeof game.map.eventVars["LabRunProgress"] === "undefined") {
+		game.trigger("ev[LabRunProgress]=0");
 	}
 
 	const mapTilesW = Math.floor(game.map.width / TILE_SIZE) - ORIGIN_X;
@@ -53,6 +54,26 @@ game => {
 	const CELLS_H = Math.floor((mapTilesH - WALL_SIZE) / period);
 
 	if (CELLS_W < 1 || CELLS_H < 1) return;
+
+	if (!game.__mazeFadePatched) {
+		game.__mazeFadePatched = true;
+		const origFade = game.fade;
+		game.fade = function(opacity, color, cb) {
+			if (opacity === 0 && game.__mazeFadeHold) return;
+			return origFade.call(this, opacity, color, cb);
+		};
+	}
+	game.__mazeFadeHold = true;
+	game.fade(1, "#000");
+
+	const revealMaze = () => {
+		if (!game.render) {
+			setTimeout(revealMaze, 50);
+			return;
+		}
+		game.__mazeFadeHold = false;
+		game.fade(0);
+	};
 
 	let rngState = seed >>> 0;
 	const nextRandom = () => {
@@ -97,9 +118,9 @@ game => {
 		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
 	}
 
-	const MAZE_PROGRESS = mazeVar("MazeProgress", 0);
-	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + MAZE_PROGRESS * 10) / 100;
-	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + MAZE_PROGRESS * 5) / 100;
+	const LAB_PROGRESS = mazeVar("LabRunProgress", 0);
+	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + LAB_PROGRESS * 10) / 100;
+	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + LAB_PROGRESS * 5) / 100;
 	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
 	const PASSAGE_WIDTHS = [3, 3];
 	for (let width = 5; width <= MAX_PASSAGE_WIDTH; width += 2) PASSAGE_WIDTHS.push(width);
@@ -291,7 +312,7 @@ game => {
 	const colCenter = buildCenters(colLogical);
 	const rowCenter = buildCenters(rowLogical);
 
-	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty) + MAZE_PROGRESS;
+	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty) + LAB_PROGRESS;
 	const ITEM_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
 	const ITEM_TABLE = [
 		{ uid: "06xa6ohm", minDifficulty: 0, baseChance: 60 },
@@ -390,17 +411,19 @@ game => {
 	if (pointB) {
 		const warpX = (ORIGIN_X + pointB[0]) * TILE_SIZE;
 		const warpY = (ORIGIN_Y + pointB[1] + 1) * TILE_SIZE;
+		const exitMod = LAB_PROGRESS % 6;
+		const exitSpawn = exitMod === 2 ? 2 : (exitMod === 5 ? 3 : 1);
 		const prevOntile = game.map.ontile;
 		game.map.ontile = "any";
-		game.map.addObject(7, warpX, warpY, "ev[MazeProgress]=+1&ev[MazeSeed]=0&warp=" + game.map.id + ",0");
+		game.map.addObject(7, warpX, warpY, "freeze&rise=spin&ev[LabRunProgress]=+1&ev[MazeSeed]=0&pause=700&warp=" + EXIT_MAP + "," + exitSpawn);
 		game.map.ontile = prevOntile;
 	}
 
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
 	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
 
-	const levelMin = mazeVar("MazeLevelMin", MAZE_DEFAULTS.MazeLevelMin) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
-	const levelMax = mazeVar("MazeLevelMax", MAZE_DEFAULTS.MazeLevelMax) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
+	const levelMin = mazeVar("MazeLevelMin", MAZE_DEFAULTS.MazeLevelMin) + LAB_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
+	const levelMax = mazeVar("MazeLevelMax", MAZE_DEFAULTS.MazeLevelMax) + LAB_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
 
 	const rollEncounterLevel = () => {
 		const lo = Math.max(1, Math.min(100, levelMin));
@@ -538,6 +561,20 @@ game => {
 		}
 	}
 
+	if (!game.map.reset.__mazeWrapped) {
+		const origReset = game.map.reset;
+		const wrappedReset = function() {
+			if (this.__mazeOverlay) {
+				if (this.__mazeOverlay.parent) this.__mazeOverlay.parent.removeChild(this.__mazeOverlay);
+				this.__mazeOverlay.destroy({ children: true, texture: true, baseTexture: true });
+				this.__mazeOverlay = null;
+			}
+			return origReset.apply(this, arguments);
+		};
+		wrappedReset.__mazeWrapped = true;
+		game.map.reset = wrappedReset;
+	}
+
 	if (game.map.__mazeOverlay && game.map.__mazeOverlay.parent) {
 		game.map.__mazeOverlay.parent.removeChild(game.map.__mazeOverlay);
 	}
@@ -668,6 +705,8 @@ game => {
 
 		game.containers.bottomSprites.addChild(sprite);
 		game.map.__mazeOverlay = sprite;
+
+		revealMaze();
 	};
 
 	const loaded = game.assets.get(tilesetUrl);
@@ -677,6 +716,7 @@ game => {
 		game.assets.add(tilesetUrl).load(() => {
 			const image = game.assets.get(tilesetUrl);
 			if (image) drawOverlay(image);
+			else revealMaze();
 		});
 	}
 }
