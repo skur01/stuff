@@ -13,8 +13,19 @@ game => {
 	const FLOOR_Y = 1328;
 	const GRASS_X = 32;
 	const GRASS_Y = 1328;
-	const WALL_X = 32;
-	const WALL_Y = 2224;
+	const WALL_AUTOTILE_X = 16;
+	const WALL_AUTOTILE_Y = 2208;
+	const WALL_CORNER_BL_X = 96;
+	const WALL_CORNER_BL_Y = 2224;
+	const WALL_CORNER_BR_X = 112;
+	const WALL_CORNER_BR_Y = 2224;
+	const BOTTOM_CORNER_L_X = 112;
+	const BOTTOM_CORNER_L_Y = 2240;
+	const BOTTOM_CORNER_R_X = 96;
+	const BOTTOM_CORNER_R_Y = 2240;
+	const VOID_BLOCK_X = 64;
+	const VOID_BLOCK_Y = 2288;
+	const WALL_SCALE = 1.5;
 	const DOOR_A_X = 176;
 	const DOOR_A_Y = 2384;
 	const DOOR_B_X = 176;
@@ -98,7 +109,7 @@ game => {
 		FieldClusterMin: 2,
 		FieldClusterMax: 5,
 		MazeDifficulty: 6,
-		MazeItemChance: 4,
+		FieldItemCount: 3,
 		MazeRoomDensity: 15,
 		autoevolve_all: 1,
 		overworld_encounters_max_mons: 5,
@@ -221,7 +232,6 @@ game => {
 	}
 
 	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty) + LAB_PROGRESS;
-	const ITEM_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
 	const ITEM_TABLE = [
 		{ uid: "06xa6ohm", minDifficulty: 0, baseChance: 60 },
 		{ uid: "06nsq383", minDifficulty: 3, baseChance: 30 },
@@ -233,21 +243,27 @@ game => {
 		let totalItemWeight = 0;
 		for (const it of eligibleItems) totalItemWeight += it.baseChance;
 
+		const walkableTiles = [];
 		for (let ry = 0; ry < realRows; ++ry) {
 			for (let rx = 0; rx < realCols; ++rx) {
-				if (!isWalkable(rx, ry)) continue;
-				if (nextRandom() * 100 >= ITEM_CHANCE) continue;
-
-				let roll = nextRandom() * totalItemWeight;
-				let acc = 0;
-				let chosen = eligibleItems[eligibleItems.length - 1];
-				for (const it of eligibleItems) {
-					acc += it.baseChance;
-					if (roll < acc) { chosen = it; break; }
-				}
-
-				game.map.addObject(14, (ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, [chosen.uid, 1]);
+				if (isWalkable(rx, ry)) walkableTiles.push([rx, ry]);
 			}
+		}
+
+		const itemCount = Math.min(mazeVar("FieldItemCount", MAZE_DEFAULTS.FieldItemCount), walkableTiles.length);
+		for (let n = 0; n < itemCount; ++n) {
+			const pickIdx = Math.floor(nextRandom() * walkableTiles.length);
+			const tile = walkableTiles.splice(pickIdx, 1)[0];
+
+			let roll = nextRandom() * totalItemWeight;
+			let acc = 0;
+			let chosen = eligibleItems[eligibleItems.length - 1];
+			for (const it of eligibleItems) {
+				acc += it.baseChance;
+				if (roll < acc) { chosen = it; break; }
+			}
+
+			game.map.addObject(14, (ORIGIN_X + tile[0]) * TILE_SIZE, (ORIGIN_Y + tile[1]) * TILE_SIZE, [chosen.uid, 1]);
 		}
 	}
 
@@ -347,10 +363,65 @@ game => {
 
 				ctx.drawImage(image, FLOOR_X, FLOOR_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
 
-				if (obstacle[ry][rx]) {
-					ctx.drawImage(wallImage, WALL_X, WALL_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
-				} else if (grass[ry][rx]) {
+				if (!obstacle[ry][rx] && grass[ry][rx]) {
 					ctx.drawImage(image, GRASS_X, GRASS_Y, TILE_SIZE, TILE_SIZE, dx, dy, TILE_SIZE, TILE_SIZE);
+				}
+			}
+		}
+
+		const isWall = (rx, ry) => inBounds(rx, ry) && obstacle[ry][rx];
+		const isWallFace = (rx, ry) => {
+			if (rx < 0 || ry < 0 || rx >= realCols || ry >= realRows) return false;
+			if (isWall(rx, ry)) return false;
+			return isWall(rx - 1, ry) || isWall(rx + 1, ry) || isWall(rx, ry - 1) || isWall(rx, ry + 1);
+		};
+
+		const wallSize = TILE_SIZE * WALL_SCALE;
+		const wallOffset = (wallSize - TILE_SIZE) / 2;
+
+		for (let ry = 0; ry < realRows; ++ry) {
+			for (let rx = 0; rx < realCols; ++rx) {
+				if (!obstacle[ry][rx]) continue;
+
+				const dx = rx * TILE_SIZE - wallOffset;
+				const dy = ry * TILE_SIZE - wallOffset;
+
+				const wallLeft = isWall(rx - 1, ry);
+				const wallRight = isWall(rx + 1, ry);
+				const wallUp = isWall(rx, ry - 1);
+				const wallDown = isWall(rx, ry + 1);
+
+				if (!wallLeft && !wallRight && !wallUp && !wallDown) {
+					ctx.drawImage(wallImage, VOID_BLOCK_X + TILE_SIZE, VOID_BLOCK_Y + TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+					continue;
+				}
+
+				const col = wallLeft ? 0 : (wallRight ? 2 : 1);
+				const row = wallUp ? 0 : (wallDown ? 2 : 1);
+				ctx.drawImage(wallImage, WALL_AUTOTILE_X + col * TILE_SIZE, WALL_AUTOTILE_Y + row * TILE_SIZE, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+			}
+		}
+
+		for (let ry = 0; ry < realRows; ++ry) {
+			for (let rx = 0; rx < realCols; ++rx) {
+				if (isWall(rx, ry) || !isWallFace(rx, ry)) continue;
+
+				const dx = rx * TILE_SIZE - wallOffset;
+				const dy = ry * TILE_SIZE - wallOffset;
+
+				const faceRight = isWall(rx + 1, ry);
+				const faceLeft = isWall(rx - 1, ry);
+				const faceDown = isWall(rx, ry + 1);
+				const faceUp = isWall(rx, ry - 1);
+
+				if (faceDown && faceRight && isWall(rx + 1, ry + 1)) {
+					ctx.drawImage(wallImage, WALL_CORNER_BR_X, WALL_CORNER_BR_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+				} else if (faceDown && faceLeft && isWall(rx - 1, ry + 1)) {
+					ctx.drawImage(wallImage, WALL_CORNER_BL_X, WALL_CORNER_BL_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+				} else if (faceUp && faceRight && isWall(rx + 1, ry - 1)) {
+					ctx.drawImage(wallImage, BOTTOM_CORNER_L_X, BOTTOM_CORNER_L_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
+				} else if (faceUp && faceLeft && isWall(rx - 1, ry - 1)) {
+					ctx.drawImage(wallImage, BOTTOM_CORNER_R_X, BOTTOM_CORNER_R_Y, TILE_SIZE, TILE_SIZE, dx, dy, wallSize, wallSize);
 				}
 			}
 		}
