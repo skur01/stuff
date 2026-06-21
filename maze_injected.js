@@ -412,8 +412,15 @@ game => {
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
 		if (!game.map.mapVars.MazeSpawned) {
-			if (game.render) game.player.setPosition(spawnX, spawnY);
 			game.map.mapVars.MazeSpawned = 1;
+			const applySpawn = () => {
+				if (!game.render) {
+					setTimeout(applySpawn, 50);
+					return;
+				}
+				game.player.setPosition(spawnX, spawnY);
+			};
+			applySpawn();
 		}
 		console.log("[MAZE] spawnA set | spawns[0]=" + JSON.stringify(game.map.spawns[0]) + " | candidates=" + doorCandidates.length + " | render=" + game.render + " | player=" + game.player.x + "," + game.player.y);
 	} else {
