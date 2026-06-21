@@ -113,8 +113,8 @@ game => {
 		MazeBaseChaos: 12,
 		FieldWallDensity: 16,
 		FieldGrassDensity: 18,
-		FieldClusterMin: 6,
-		FieldClusterMax: 14,
+		FieldClusterMin: 1,
+		FieldClusterMax: 3,
 		MazeDifficulty: 6,
 		FieldItemCount: 3,
 		MazeRoomDensity: 15,
@@ -152,27 +152,45 @@ game => {
 	const DIRS4 = [[0, -1], [1, 0], [0, 1], [-1, 0]];
 
 	const placeChunk = (cx, cy) => {
-		const placed = [];
-		const size = CLUSTER_MIN + Math.floor(nextRandom() * (CLUSTER_MAX - CLUSTER_MIN + 1));
+		const centers = [];
+		const centerCount = CLUSTER_MIN + Math.floor(nextRandom() * (CLUSTER_MAX - CLUSTER_MIN + 1));
+		const visited = new Set();
+		const key = (x, y) => y * realCols + x;
 		let frontier = [[cx, cy]];
-		for (let s = 0; s < size && frontier.length; ++s) {
+		while (centers.length < centerCount && frontier.length) {
 			const idx = Math.floor(nextRandom() * frontier.length);
 			const next = frontier.splice(idx, 1)[0];
 			const px = next[0];
 			const py = next[1];
-			if (!inBounds(px, py) || obstacle[py][px]) continue;
-			obstacle[py][px] = true;
-			placed.push([px, py]);
+			if (!inBounds(px, py) || visited.has(key(px, py))) continue;
+			visited.add(key(px, py));
+			centers.push([px, py]);
 			for (const dir of DIRS4) {
 				const nx = px + dir[0];
 				const ny = py + dir[1];
-				if (inBounds(nx, ny) && !obstacle[ny][nx]) frontier.push([nx, ny]);
+				if (inBounds(nx, ny) && !visited.has(key(nx, ny))) frontier.push([nx, ny]);
+			}
+		}
+
+		const placed = [];
+		for (const center of centers) {
+			for (let oy = -1; oy <= 1; ++oy) {
+				for (let ox = -1; ox <= 1; ++ox) {
+					const sx = center[0] + ox;
+					const sy = center[1] + oy;
+					if (inBounds(sx, sy) && !obstacle[sy][sx]) {
+						obstacle[sy][sx] = true;
+						placed.push([sx, sy]);
+					}
+				}
 			}
 		}
 		return placed;
 	};
 
-	const chunkAttempts = Math.round(realCols * realRows * WALL_DENSITY / ((CLUSTER_MIN + CLUSTER_MAX) / 2));
+	const avgCenters = (CLUSTER_MIN + CLUSTER_MAX) / 2;
+	const avgTilesPerChunk = 5 + avgCenters * 4;
+	const chunkAttempts = Math.round(realCols * realRows * WALL_DENSITY / avgTilesPerChunk);
 	const placedChunks = [];
 	for (let a = 0; a < chunkAttempts; ++a) {
 		const cx = BORDER + Math.floor(nextRandom() * (realCols - BORDER * 2));
