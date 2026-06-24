@@ -377,6 +377,7 @@ game => {
 		return answers;
 	};
 	const origCheckForInteraction = game.map.checkForInteraction.bind(game.map);
+	console.log("[TAG] Installing checkForInteraction patch. Current fn is own property:", game.map.hasOwnProperty("checkForInteraction"));
 	game.map.checkForInteraction = function(obj, x, y, msg, ontouch, ontile, onlyCheckSolids) {
 		const interceptCondition = x === undefined && obj.local && !ontouch && !ontile;
 		console.log("[TAG] checkForInteraction called | x:", x, "obj.local:", obj.local, "ontouch:", ontouch, "ontile:", ontile, "=> intercept:", interceptCondition);
@@ -473,6 +474,7 @@ game => {
 	};
 	const origLoad = game.map.load.bind(game.map);
 	game.map.load = function(...args) {
+		console.log("[TAG] map.load called -- running cleanup and UNPATCHING checkForInteraction. args:", args);
 		clearTimeout(itLeaveTimer);
 		itLeaveTimer = null;
 		notifiedPlayers.clear();
