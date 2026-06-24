@@ -539,15 +539,21 @@ game => {
 
 	const origCheckForInteraction = game.map.checkForInteraction.bind(game.map);
 	game.map.checkForInteraction = function(obj, x, y, msg, ontouch, ontile, onlyCheckSolids) {
-		// Only intercept the direct action-button click on a player object.
-		// All other branches (NPC messages, items, surf, etc.) fall through untouched.
-		if (x === undefined && obj.local && !ontouch && !ontile) {
+		const interceptCondition = x === undefined && obj.local && !ontouch && !ontile;
+		console.log("[TAG] checkForInteraction called | x:", x, "obj.local:", obj.local, "ontouch:", ontouch, "ontile:", ontile, "=> intercept:", interceptCondition);
+
+		if (interceptCondition) {
 			const clickX = obj.x + (obj.direction === 2 ? 16 : obj.direction === 3 ? -16 : 0);
 			const clickY = obj.y + (obj.direction === 0 ? 16 : obj.direction === 1 ? -16 : 0);
 			const key    = clickX + "," + clickY + "," + obj.z;
+			console.log("[TAG] player pos:", obj.x, obj.y, "direction:", obj.direction, "z:", obj.z, "=> entity key:", key);
+			console.log("[TAG] entities at key:", game.map.entities[key]);
+
 			const entity = game.map.entities[key] && game.map.entities[key][0];
+			console.log("[TAG] entity found:", entity, "entity.player:", entity && entity.player, "entity.uid:", entity && entity.uid);
 
 			if (entity && entity.player && !String(entity.uid).endsWith("-ally")) {
+				console.log("[TAG] intercept succeeded, building tag menu for:", entity.username);
 				const targetObj = entity;
 
 				game.textbox.say("It's " + targetObj.username + "!");
