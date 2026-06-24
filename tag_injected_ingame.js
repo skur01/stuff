@@ -315,9 +315,23 @@ game => {
 		if (!isIt() || !isActive()) return;
 		relayTo(username, TAG_PREFIX + SUB_SYNC + ":" + game.player.uid + ":" + game.map.getVar(MAPVAR_END_TIME, 0) + ":" + hostUid);
 	};
+	let proximityLogThrottle = 0;
 	const checkProximity = () => {
-		if (!isIt() || !isActive()) return;
-		if (Date.now() < tagCooldownUntil) return;
+		const now = Date.now();
+		const shouldLog = now - proximityLogThrottle > 1000;
+		if (shouldLog) proximityLogThrottle = now;
+		if (!isIt()) {
+			if (shouldLog) console.log("[TAG] checkProximity: not it. itUid:", getItUid(), "myUid:", game.player.uid);
+			return;
+		}
+		if (!isActive()) {
+			if (shouldLog) console.log("[TAG] checkProximity: not active. endTime:", game.map.getVar(MAPVAR_END_TIME, 0));
+			return;
+		}
+		if (now < tagCooldownUntil) {
+			if (shouldLog) console.log("[TAG] checkProximity: on cooldown for", tagCooldownUntil - now, "ms");
+			return;
+		}
 		const px = game.player.x;
 		const py = game.player.y;
 		for (const name in game.players.list) {
@@ -326,7 +340,10 @@ game => {
 			if (!other || !other.nearby || other === game.player) continue;
 			const dx = other.x - px;
 			const dy = other.y - py;
-			if (Math.sqrt(dx * dx + dy * dy) <= TAG_TOUCH_RADIUS) {
+			const dist = Math.sqrt(dx * dx + dy * dy);
+			if (shouldLog) console.log("[TAG] proximity check:", other.username, "dist:", dist.toFixed(1), "nearby:", other.nearby, "pos:", other.x, other.y, "vs mine:", px, py);
+			if (dist <= TAG_TOUCH_RADIUS) {
+				console.log("[TAG] TAG! passing to", other.username, "at dist", dist.toFixed(1));
 				passTag(other);
 				return;
 			}
