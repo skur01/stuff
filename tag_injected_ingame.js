@@ -6,6 +6,7 @@ game => {
 		if (prev.origCheckForInteraction)  game.map.checkForInteraction = prev.origCheckForInteraction;
 		if (prev.origJump)                 game.player.jump = prev.origJump;
 		if (prev.origOverworldUpdate)      GameState.overworld.prototype.update = prev.origOverworldUpdate;
+		if (prev.hudDrawable)              game.hud.unregister(prev.hudDrawable);
 		console.log("[TAG] Restored previous patch originals before re-patching.");
 	}
 	game.map.__tagPatchState = {};
@@ -29,9 +30,9 @@ game => {
 	const IT_LEAVE_DELAY_MS     = 3000;
 	const lobbyMembers    = new Set();
 	const notifiedPlayers = new Set();
-	let   hudElement      = null;
-	let   timerElement    = null;
-	let   timerInterval   = null;
+	let   statusText      = "";
+	let   timerEndTime    = 0;
+	let   hudDrawable     = null;
 	let   blackoutGraphic = null;
 	let   itLeaveTimer    = null;
 	let   hostUid         = "";
@@ -45,41 +46,60 @@ game => {
 	const getItUid = () => game.map.mapVars[MAPVAR_IT] || "";
 	const relayToMap = str      => game.client.relay([24, "map", str]);
 	const relayTo    = (u, str) => game.client.relay([24, u, str]);
+	const ensureHudDrawable = () => {
+		if (hudDrawable) return;
+		hudDrawable = {
+			draw: () => {
+				const ctx = game.hud.ctx;
+				const w   = game.hud.canvas.width;
+				const h   = game.hud.canvas.height;
+				ctx.save();
+				ctx.textAlign = "center";
+				ctx.textBaseline = "middle";
+				if (statusText) {
+					ctx.font = "bold 10px verdana, sans-serif";
+					const padX = 6;
+					const textW = ctx.measureText(statusText).width;
+					const boxW  = textW + padX * 2;
+					const boxX  = (w - boxW) / 2;
+					ctx.fillStyle = "rgba(0,0,0,0.55)";
+					ctx.fillRect(boxX, 4, boxW, 16);
+					ctx.fillStyle = "#7fff7f";
+					ctx.fillText(statusText, w / 2, 12);
+				}
+				if (timerEndTime) {
+					const remaining = Math.max(0, Math.ceil((timerEndTime - Date.now()) / 1000));
+					const label = remaining + "s";
+					ctx.font = "bold 14px verdana, sans-serif";
+					const padX = 10;
+					const textW = ctx.measureText(label).width;
+					const boxW  = textW + padX * 2;
+					const boxX  = (w - boxW) / 2;
+					ctx.fillStyle = "rgba(0,0,0,0.65)";
+					ctx.fillRect(boxX, h - 28, boxW, 20);
+					ctx.fillStyle = "#ffffff";
+					ctx.fillText(label, w / 2, h - 18);
+					if (remaining === 0) timerEndTime = 0;
+				}
+				ctx.restore();
+			}
+		};
+		game.hud.register(hudDrawable);
+		game.map.__tagPatchState.hudDrawable = hudDrawable;
+	};
+	const showHud = text => {
+		statusText = text;
+		ensureHudDrawable();
+	};
 	const removeHud = () => {
-		if (hudElement && hudElement.parentNode) hudElement.parentNode.removeChild(hudElement);
-		hudElement = null;
+		statusText = "";
 	};
 	const removeTimerHud = () => {
-		clearInterval(timerInterval);
-		timerInterval = null;
-		if (timerElement && timerElement.parentNode) timerElement.parentNode.removeChild(timerElement);
-		timerElement = null;
+		timerEndTime = 0;
 	};
 	const startTimerHud = endTime => {
-		removeTimerHud();
-		timerElement = document.createElement("div");
-		timerElement.style.cssText = [
-			"position:fixed",
-			"bottom:32px",
-			"left:50%",
-			"transform:translateX(-50%)",
-			"background:rgba(0,0,0,0.65)",
-			"color:#ffffff",
-			"font:bold 14pt verdana,sans-serif",
-			"padding:6px 14px",
-			"border-radius:6px",
-			"pointer-events:none",
-			"z-index:99999",
-			"white-space:nowrap"
-		].join(";");
-		document.body.appendChild(timerElement);
-		const tick = () => {
-			const remaining = Math.max(0, Math.ceil((endTime - Date.now()) / 1000));
-			timerElement.textContent = remaining + "s";
-			if (remaining === 0) removeTimerHud();
-		};
-		tick();
-		timerInterval = setInterval(tick, 500);
+		timerEndTime = endTime;
+		ensureHudDrawable();
 	};
 	const removeBlackout = () => {
 		if (blackoutGraphic && blackoutGraphic.parent) {
@@ -111,27 +131,6 @@ game => {
 				game.player.frozen  = false;
 			}
 		}, 16);
-	};
-	const showHud = text => {
-		if (!hudElement) {
-			hudElement = document.createElement("div");
-			hudElement.style.cssText = [
-				"position:fixed",
-				"top:8px",
-				"left:50%",
-				"transform:translateX(-50%)",
-				"background:rgba(0,0,0,0.55)",
-				"color:#7fff7f",
-				"font:bold 10pt verdana,sans-serif",
-				"padding:4px 10px",
-				"border-radius:4px",
-				"pointer-events:none",
-				"z-index:99999",
-				"white-space:nowrap"
-			].join(";");
-			document.body.appendChild(hudElement);
-		}
-		hudElement.textContent = text;
 	};
 	const updateLobbyHud = () => {
 		if (!isHost()) return;
@@ -479,10 +478,24 @@ game => {
 				receiveEnd();
 				return;
 			}
-			if (isHost() && leavingUid === getItUid()) {
-				clearTimeout(itLeaveTimer);
-				showHud("IT left! New IT in 3 seconds...");
-				itLeaveTimer = setTimeout(forcePassTag, IT_LEAVE_DELAY_MS);
+			if (isHost()) {
+				let remaining = 1;
+				for (const name in game.players.list) {
+					if (name === "all") continue;
+					const other = game.players.list[name];
+					if (other && other.nearby && other !== game.player) ++remaining;
+				}
+				console.log("[TAG] player left, remaining participants:", remaining);
+				if (remaining <= 1) {
+					console.log("[TAG] only one player left -- ending game.");
+					endGame();
+					return;
+				}
+				if (leavingUid === getItUid()) {
+					clearTimeout(itLeaveTimer);
+					showHud("IT left! New IT in 3 seconds...");
+					itLeaveTimer = setTimeout(forcePassTag, IT_LEAVE_DELAY_MS);
+				}
 			}
 		}
 		if (data[0] === 4 && data[1] && data[2]) {
@@ -519,6 +532,10 @@ game => {
 		removeTimerHud();
 		removeBlackout();
 		removeHud();
+		if (hudDrawable) {
+			game.hud.unregister(hudDrawable);
+			hudDrawable = null;
+		}
 		if (isHost() && isActive()) {
 			const itUid  = getItUid();
 			const itObj  = game.objects.ids[itUid];
