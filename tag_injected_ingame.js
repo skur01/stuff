@@ -1,7 +1,6 @@
 game => {
-	if (game.__tagInGamePatched) return;
-	console.log("patched")
-	game.__tagInGamePatched = true;
+	if (game.map.__tagInGamePatched) return;
+	game.map.__tagInGamePatched = true;
 	const MAPVAR_PARTICIPATING  = "TAG_participating";
 	const MAPVAR_HOST           = "TAG_host";
 	const MAPVAR_IT             = "TAG_it";
@@ -490,7 +489,7 @@ game => {
 		game.map.checkForInteraction         = origCheckForInteraction;
 		game.player.jump                     = origJump;
 		GameState.overworld.prototype.update = origOverworldUpdate;
-		game.__tagInGamePatched              = false;
+		game.map.__tagInGamePatched          = false;
 		origLoad(...args);
 	};
 }
