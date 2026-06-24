@@ -1,6 +1,14 @@
 game => {
-	if (game.map.__tagInGamePatched) return;
-	game.map.__tagInGamePatched = true;
+	console.log("[TAG] Script body entered. Previously patched:", !!game.map.__tagPatchState);
+	if (game.map.__tagPatchState) {
+		const prev = game.map.__tagPatchState;
+		if (prev.origReceive)              game.client.receive = prev.origReceive;
+		if (prev.origCheckForInteraction)  game.map.checkForInteraction = prev.origCheckForInteraction;
+		if (prev.origJump)                 game.player.jump = prev.origJump;
+		if (prev.origOverworldUpdate)      GameState.overworld.prototype.update = prev.origOverworldUpdate;
+		console.log("[TAG] Restored previous patch originals before re-patching.");
+	}
+	game.map.__tagPatchState = {};
 	const MAPVAR_PARTICIPATING  = "TAG_participating";
 	const MAPVAR_HOST           = "TAG_host";
 	const MAPVAR_IT             = "TAG_it";
@@ -377,7 +385,8 @@ game => {
 		return answers;
 	};
 	const origCheckForInteraction = game.map.checkForInteraction.bind(game.map);
-	console.log("[TAG] Installing checkForInteraction patch. Current fn is own property:", game.map.hasOwnProperty("checkForInteraction"));
+	game.map.__tagPatchState.origCheckForInteraction = origCheckForInteraction;
+	console.log("[TAG] Installing checkForInteraction patch.");
 	game.map.checkForInteraction = function(obj, x, y, msg, ontouch, ontile, onlyCheckSolids) {
 		const interceptCondition = x === undefined && obj.local && !ontouch && !ontile;
 		console.log("[TAG] checkForInteraction called | x:", x, "obj.local:", obj.local, "ontouch:", ontouch, "ontile:", ontile, "=> intercept:", interceptCondition);
@@ -432,6 +441,7 @@ game => {
 		return origCheckForInteraction(obj, x, y, msg, ontouch, ontile, onlyCheckSolids);
 	};
 	const origReceive = game.client.receive.bind(game.client);
+	game.map.__tagPatchState.origReceive = origReceive;
 	game.client.receive = function(data) {
 		origReceive(data);
 		if (data[0] === 2 && data.length === 2 && isActive()) {
@@ -463,18 +473,15 @@ game => {
 		}
 	};
 	const origJump = game.player.jump.bind(game.player);
+	game.map.__tagPatchState.origJump = origJump;
 	game.player.jump = function(height) {
 		origJump(height);
 		if (isHost() && !isActive()) startGame();
 	};
 	const origOverworldUpdate = GameState.overworld.prototype.update;
-	GameState.overworld.prototype.update = function() {
-		origOverworldUpdate.call(this);
-		if (this.game === game) checkProximity();
-	};
-	const origLoad = game.map.load.bind(game.map);
-	game.map.load = function(...args) {
-		console.log("[TAG] map.load called -- running cleanup and UNPATCHING checkForInteraction. args:", args);
+	game.map.__tagPatchState.origOverworldUpdate = origOverworldUpdate;
+	const patchedMapId = game.map.id;
+	const runCleanup = () => {
 		clearTimeout(itLeaveTimer);
 		itLeaveTimer = null;
 		notifiedPlayers.clear();
@@ -491,7 +498,16 @@ game => {
 		game.map.checkForInteraction         = origCheckForInteraction;
 		game.player.jump                     = origJump;
 		GameState.overworld.prototype.update = origOverworldUpdate;
-		game.map.__tagInGamePatched          = false;
-		origLoad(...args);
+		game.map.__tagPatchState             = null;
+	};
+	GameState.overworld.prototype.update = function() {
+		origOverworldUpdate.call(this);
+		if (this.game !== game) return;
+		if (game.map.id !== patchedMapId) {
+			console.log("[TAG] Map changed from", patchedMapId, "to", game.map.id, "-- running cleanup.");
+			runCleanup();
+			return;
+		}
+		checkProximity();
 	};
 }
