@@ -37,10 +37,12 @@ game => {
 	let   hostUid         = "";
 	let   tagCooldownUntil = 0;
 	const isHost          = () => !!+game.map.getVar(MAPVAR_HOST, 0);
-	const isIt            = () => game.map.getVar(MAPVAR_IT, "") === game.player.uid;
+	const isIt            = () => getItUid() === game.player.uid;
 	const isActive        = () => !!+game.map.getVar(MAPVAR_END_TIME, 0);
 	const isParticipating = () => !!+game.map.getVar(MAPVAR_PARTICIPATING, 0);
-	const setVar = (name, value) => game.trigger(name + "=" + value);
+	const setVar = (name, value) => game.trigger("mapvar[" + name + "]=" + value);
+	const setItUid = uid => { game.map.mapVars[MAPVAR_IT] = uid; };
+	const getItUid = () => game.map.mapVars[MAPVAR_IT] || "";
 	const relayToMap = str      => game.client.relay([24, "map", str]);
 	const relayTo    = (u, str) => game.client.relay([24, u, str]);
 	const removeHud = () => {
@@ -137,18 +139,22 @@ game => {
 		showHud("Tag lobby: " + count + " player" + (count !== 1 ? "s" : "") + " - Jump to start!");
 	};
 	const openLobby = () => {
+		console.log("[TAG] openLobby called");
 		setVar(MAPVAR_HOST, 1);
 		setVar(MAPVAR_PARTICIPATING, 1);
 		lobbyMembers.clear();
+		console.log("[TAG] After openLobby -> isHost:", isHost(), "isParticipating:", isParticipating(), "mapVars:", game.map.mapVars[MAPVAR_HOST], game.map.mapVars[MAPVAR_PARTICIPATING]);
 		updateLobbyHud();
 	};
 	const closeLobby = () => {
+		console.log("[TAG] closeLobby called");
 		setVar(MAPVAR_HOST, 0);
 		setVar(MAPVAR_PARTICIPATING, 0);
 		lobbyMembers.clear();
 		removeHud();
 	};
 	const joinLobby = hostUsername => {
+		console.log("[TAG] joinLobby called, host:", hostUsername);
 		setVar(MAPVAR_PARTICIPATING, 1);
 		setVar(MAPVAR_HOST, 0);
 		game.map.mapVars[MAPVAR_HOST + "_name"] = hostUsername;
@@ -156,6 +162,7 @@ game => {
 		showHud("Joined tag lobby! Waiting for host to start...");
 	};
 	const leaveLobby = () => {
+		console.log("[TAG] leaveLobby called");
 		const hostUsername = game.map.mapVars[MAPVAR_HOST + "_name"] || "";
 		setVar(MAPVAR_PARTICIPATING, 0);
 		game.map.mapVars[MAPVAR_HOST + "_name"] = "";
@@ -177,10 +184,14 @@ game => {
 		}
 	};
 	const startGame = () => {
-		if (!isHost() || isActive()) return;
+		console.log("[TAG] startGame called. isHost:", isHost(), "isActive:", isActive());
+		if (!isHost() || isActive()) {
+			console.log("[TAG] startGame bailed -- not host or already active");
+			return;
+		}
 		const endTime = Date.now() + TAG_DURATION_MS;
 		hostUid = game.player.uid;
-		setVar(MAPVAR_IT, game.player.uid);
+		setItUid(game.player.uid);
 		setVar(MAPVAR_END_TIME, endTime);
 		setVar(MAPVAR_PARTICIPATING, 1);
 		game.player.createIcon(TAG_ICON, true);
@@ -193,7 +204,7 @@ game => {
 	};
 	const receiveStart = (itUid, endTime, hUid) => {
 		hostUid = hUid || hostUid;
-		setVar(MAPVAR_IT, itUid);
+		setItUid(itUid);
 		setVar(MAPVAR_END_TIME, endTime);
 		const itObj = game.objects.ids[itUid];
 		if (itObj) itObj.createIcon(TAG_ICON, true);
@@ -208,7 +219,7 @@ game => {
 	const passTag = targetObj => {
 		if (!isIt() || !isActive()) return;
 		if (Date.now() < tagCooldownUntil) return;
-		setVar(MAPVAR_IT, targetObj.uid);
+		setItUid(targetObj.uid);
 		clearParticipantIcons();
 		game.player.createIcon(0);
 		targetObj.createIcon(TAG_ICON, true);
@@ -217,10 +228,10 @@ game => {
 	};
 	const receivePass = newItUid => {
 		const wasIt     = isIt();
-		const prevItUid = game.map.getVar(MAPVAR_IT, "");
+		const prevItUid = getItUid();
 		const prevItObj = game.objects.ids[prevItUid];
 		if (prevItObj) prevItObj.createIcon(0);
-		setVar(MAPVAR_IT, newItUid);
+		setItUid(newItUid);
 		const newItObj = game.objects.ids[newItUid];
 		if (newItObj) newItObj.createIcon(TAG_ICON, true);
 		if (wasIt) clearParticipantIcons();
@@ -245,10 +256,10 @@ game => {
 		candidates.push(game.player);
 		if (!candidates.length) { endGame(); return; }
 		const newIt = candidates[Math.floor(Math.random() * candidates.length)];
-		const prevItUid = game.map.getVar(MAPVAR_IT, "");
+		const prevItUid = getItUid();
 		const prevItObj = game.objects.ids[prevItUid];
 		if (prevItObj) prevItObj.createIcon(0);
-		setVar(MAPVAR_IT, newIt.uid);
+		setItUid(newIt.uid);
 		newIt.createIcon(TAG_ICON, true);
 		relayToMap(TAG_PREFIX + SUB_PASS + ":" + newIt.uid);
 		showHud(newIt === game.player ? "The previous IT left - you're IT!" : newIt.username + " is now IT!");
@@ -256,7 +267,7 @@ game => {
 	const receiveEnd = itUsername => {
 		const wasIt = isIt();
 		if (wasIt) clearParticipantIcons();
-		setVar(MAPVAR_IT, 0);
+		setItUid("");
 		setVar(MAPVAR_END_TIME, 0);
 		setVar(MAPVAR_PARTICIPATING, 0);
 		game.map.mapVars[MAPVAR_HOST + "_name"] = "";
@@ -271,12 +282,12 @@ game => {
 	};
 	const endGame = () => {
 		const wasIt      = isIt();
-		const itUid      = game.map.getVar(MAPVAR_IT, "");
+		const itUid      = getItUid();
 		const itObj      = game.objects.ids[itUid];
 		const itUsername = itObj ? itObj.username : "someone";
 		clearTimeout(itLeaveTimer);
 		itLeaveTimer = null;
-		setVar(MAPVAR_IT, 0);
+		setItUid("");
 		setVar(MAPVAR_END_TIME, 0);
 		setVar(MAPVAR_PARTICIPATING, 0);
 		setVar(MAPVAR_HOST, 0);
@@ -324,6 +335,7 @@ game => {
 	const handleTagRelay = str => {
 		const parts   = str.slice(TAG_PREFIX.length).split(":");
 		const subtype = parts[0];
+		console.log("[TAG] handleTagRelay:", subtype, "parts:", parts, "| isHost:", isHost());
 		if (subtype === SUB_INVITE) {
 			const hostUsername = parts[1];
 			game.map.mapVars[MAPVAR_HOST + "_name"] = hostUsername;
@@ -450,7 +462,7 @@ game => {
 				receiveEnd();
 				return;
 			}
-			if (isHost() && leavingUid === game.map.getVar(MAPVAR_IT, "")) {
+			if (isHost() && leavingUid === getItUid()) {
 				clearTimeout(itLeaveTimer);
 				showHud("IT left! New IT in 3 seconds...");
 				itLeaveTimer = setTimeout(forcePassTag, IT_LEAVE_DELAY_MS);
@@ -476,6 +488,7 @@ game => {
 	game.map.__tagPatchState.origJump = origJump;
 	game.player.jump = function(height) {
 		origJump(height);
+		console.log("[TAG] jump fired. isHost:", isHost(), "isActive:", isActive());
 		if (isHost() && !isActive()) startGame();
 	};
 	const origOverworldUpdate = GameState.overworld.prototype.update;
@@ -490,7 +503,7 @@ game => {
 		removeBlackout();
 		removeHud();
 		if (isHost() && isActive()) {
-			const itUid  = game.map.getVar(MAPVAR_IT, "");
+			const itUid  = getItUid();
 			const itObj  = game.objects.ids[itUid];
 			relayToMap(TAG_PREFIX + SUB_END + ":" + (itObj ? itObj.username : ""));
 		}
