@@ -302,11 +302,22 @@ game => {
 
 	const REWARD_ITEM = "06mdfqot";
 	const REWARD_ROCKS = [
-		{ sprite: "4543/bigmegarock", amount: 8 },
-		{ sprite: "4543/megamedrock", amount: 4 },
-		{ sprite: "4543/megasmallrock1", amount: 2 }
+		{ sprite: "4543/megasmallrock1", amount: 2, weight: 60 },
+		{ sprite: "4543/megamedrock", amount: 4, weight: 30 },
+		{ sprite: "4543/bigmegarock", amount: 8, weight: 10 }
 	];
 	const REWARD_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
+
+	const pickRewardRock = () => {
+		let total = 0;
+		for (const r of REWARD_ROCKS) total += r.weight;
+		let roll = nextRandom() * total;
+		for (const r of REWARD_ROCKS) {
+			roll -= r.weight;
+			if (roll < 0) return r;
+		}
+		return REWARD_ROCKS[REWARD_ROCKS.length - 1];
+	};
 
 	const tileKey = (tx, ty) => ty * realCols + tx;
 	const occupiedTiles = new Set();
@@ -320,7 +331,7 @@ game => {
 			if (degree !== 1) continue;
 			if (nextRandom() * 100 >= REWARD_CHANCE) continue;
 
-			const rock = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
+			const rock = pickRewardRock();
 			const itemX = colCenter[cx * 2 + 1];
 			const itemY = rowCenter[cy * 2 + 1];
 			occupiedTiles.add(tileKey(itemX, itemY));
@@ -461,7 +472,7 @@ game => {
 	let scatterRewardPlaced = 0;
 
 	const MEGA_PROGRESS_STEP = mazeVar("MazeMegaProgressStep", MAZE_DEFAULTS.MazeMegaProgressStep);
-	const MEGA_CHANCE_RATE = 0.06;
+	const MEGA_CHANCE_RATE = 0.02;
 	const MEGA_CHANCE_MULT_MAX = 3;
 	const MEGA_CAP_GROWTH_MAX = 5;
 	const megaChanceMult = Math.min(MEGA_CHANCE_MULT_MAX, 1 + MAZE_PROGRESS * MEGA_CHANCE_RATE);
@@ -536,7 +547,7 @@ game => {
 		if (!isSafeToBlock(rx, ry)) continue;
 
 		if (scatterRewardPlaced < scatterRewardMaxNow && nextRandom() * 100 < SCATTER_REWARD_CHANCE * megaChanceMult) {
-			const rock = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
+			const rock = pickRewardRock();
 			game.map.addObject(14, px, py, [REWARD_ITEM, rock.amount], rock.sprite);
 			++scatterRewardPlaced;
 			markSpacing(rx, ry);
