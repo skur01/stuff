@@ -86,8 +86,8 @@ game => {
 		MazeItemChance: 35,
 		MazeDecorRareChance: 2,
 		MazeDecorMegaMax: 2,
-		MazeDecorSmallChance: 18,
-		MazeDecorBigChance: 22,
+		MazeDecorSmallChance: 10,
+		MazeDecorBigChance: 12,
 		MazeRoomDensity: 15,
 		MazeLevelMin: 5,
 		MazeLevelMax: 10,
@@ -446,9 +446,22 @@ game => {
 	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
 	const MEGA_DECOR_ITEM = "06mdfqot";
 	const DECOR_LAYER = "z10";
-	const DECOR_SPACING = 3;
-	let decorIndex = 0;
+	const DECOR_SPACING = 5;
 	let megaPlaced = 0;
+
+	game.__caveDecorUids = game.__caveDecorUids || [];
+	for (let i = 0; i < game.__caveDecorUids.length; ++i) {
+		const old = game.objects.get(game.__caveDecorUids[i]);
+		if (old) old.remove();
+	}
+	game.__caveDecorUids = [];
+	game.__caveDecorSeq = game.__caveDecorSeq || 0;
+
+	const nextDecorUid = () => {
+		const uid = "caveDecor" + (game.__caveDecorSeq++);
+		game.__caveDecorUids.push(uid);
+		return uid;
+	};
 
 	const markSpacing = (rx, ry) => {
 		for (let oy = -DECOR_SPACING; oy <= DECOR_SPACING; ++oy) {
@@ -475,7 +488,7 @@ game => {
 			const py = (ORIGIN_Y + ry) * TILE_SIZE;
 
 			if (bigAreaClear(rx, ry) && nextRandom() * 100 < BIG_DECOR_CHANCE) {
-				game.map.addObject(9, px + 8, py + 16, "mazeDecor" + decorIndex++, "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
+				game.map.addObject(9, px + 8, py + 16, nextDecorUid(), "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
 				solidTile(rx, ry);
 				solidTile(rx + 1, ry);
 				solidTile(rx, ry + 1);
@@ -489,7 +502,7 @@ game => {
 
 			if (megaPlaced < MEGA_DECOR_MAX && nextRandom() * 100 < RARE_DECOR_CHANCE) {
 				const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
-				const smallUid = "mazeDecor" + decorIndex++;
+				const smallUid = nextDecorUid();
 				game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
 				game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
 				game.map.addObject(10, 3, smallUid, 1);
@@ -499,7 +512,7 @@ game => {
 			}
 
 			if (nextRandom() * 100 < SMALL_DECOR_CHANCE) {
-				game.map.addObject(9, px, py, "mazeDecor" + decorIndex++, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+				game.map.addObject(9, px, py, nextDecorUid(), "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
 				solidTile(rx, ry);
 				markSpacing(rx, ry);
 			}
