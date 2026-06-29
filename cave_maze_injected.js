@@ -86,6 +86,9 @@ game => {
 		MazeItemChance: 35,
 		MazeDecorRareChance: 2,
 		MazeDecorMegaMax: 2,
+		MazeScatterRewardChance: 1,
+		MazeScatterRewardMax: 1,
+		MazeMegaProgressStep: 5,
 		MazeDecorSmallChance: 10,
 		MazeDecorBigChance: 12,
 		MazeRoomDensity: 15,
@@ -298,7 +301,11 @@ game => {
 	const rowCenter = buildCenters(rowLogical);
 
 	const REWARD_ITEM = "06mdfqot";
-	const REWARD_ROCKS = ["4543/bigmegarock", "4543/megamedrock", "4543/megasmallrock1"];
+	const REWARD_ROCKS = [
+		{ sprite: "4543/bigmegarock", amount: 8 },
+		{ sprite: "4543/megamedrock", amount: 4 },
+		{ sprite: "4543/megasmallrock1", amount: 2 }
+	];
 	const REWARD_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
 
 	const tileKey = (tx, ty) => ty * realCols + tx;
@@ -313,11 +320,11 @@ game => {
 			if (degree !== 1) continue;
 			if (nextRandom() * 100 >= REWARD_CHANCE) continue;
 
-			const rockSprite = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
+			const rock = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
 			const itemX = colCenter[cx * 2 + 1];
 			const itemY = rowCenter[cy * 2 + 1];
 			occupiedTiles.add(tileKey(itemX, itemY));
-			game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [REWARD_ITEM, 1], rockSprite);
+			game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [REWARD_ITEM, rock.amount], rock.sprite);
 		}
 	}
 
@@ -441,6 +448,8 @@ game => {
 
 	const RARE_DECOR_CHANCE = mazeVar("MazeDecorRareChance", MAZE_DEFAULTS.MazeDecorRareChance);
 	const MEGA_DECOR_MAX = mazeVar("MazeDecorMegaMax", MAZE_DEFAULTS.MazeDecorMegaMax);
+	const SCATTER_REWARD_CHANCE = mazeVar("MazeScatterRewardChance", MAZE_DEFAULTS.MazeScatterRewardChance);
+	const SCATTER_REWARD_MAX = mazeVar("MazeScatterRewardMax", MAZE_DEFAULTS.MazeScatterRewardMax);
 	const SMALL_DECOR_CHANCE = mazeVar("MazeDecorSmallChance", MAZE_DEFAULTS.MazeDecorSmallChance);
 	const BIG_DECOR_CHANCE = mazeVar("MazeDecorBigChance", MAZE_DEFAULTS.MazeDecorBigChance);
 	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
@@ -449,6 +458,16 @@ game => {
 	const DECOR_SPACING_MIN = 2;
 	const DECOR_SPACING_MAX = 6;
 	let megaPlaced = 0;
+	let scatterRewardPlaced = 0;
+
+	const MEGA_PROGRESS_STEP = mazeVar("MazeMegaProgressStep", MAZE_DEFAULTS.MazeMegaProgressStep);
+	const MEGA_CHANCE_RATE = 0.06;
+	const MEGA_CHANCE_MULT_MAX = 3;
+	const MEGA_CAP_GROWTH_MAX = 5;
+	const megaChanceMult = Math.min(MEGA_CHANCE_MULT_MAX, 1 + MAZE_PROGRESS * MEGA_CHANCE_RATE);
+	const megaCapGrowth = Math.min(MEGA_CAP_GROWTH_MAX, Math.floor(MAZE_PROGRESS / MEGA_PROGRESS_STEP));
+	const scatterRewardMaxNow = SCATTER_REWARD_MAX + megaCapGrowth;
+	const megaDecorMaxNow = MEGA_DECOR_MAX + megaCapGrowth;
 
 	game.__caveDecorUids = game.__caveDecorUids || [];
 	for (let i = 0; i < game.__caveDecorUids.length; ++i) {
@@ -516,7 +535,15 @@ game => {
 
 		if (!isSafeToBlock(rx, ry)) continue;
 
-		if (megaPlaced < MEGA_DECOR_MAX && nextRandom() * 100 < RARE_DECOR_CHANCE) {
+		if (scatterRewardPlaced < scatterRewardMaxNow && nextRandom() * 100 < SCATTER_REWARD_CHANCE * megaChanceMult) {
+			const rock = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
+			game.map.addObject(14, px, py, [REWARD_ITEM, rock.amount], rock.sprite);
+			++scatterRewardPlaced;
+			markSpacing(rx, ry);
+			continue;
+		}
+
+		if (megaPlaced < megaDecorMaxNow && nextRandom() * 100 < RARE_DECOR_CHANCE * megaChanceMult) {
 			const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
 			const smallUid = nextDecorUid();
 			game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
