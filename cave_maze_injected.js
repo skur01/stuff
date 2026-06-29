@@ -54,6 +54,8 @@ game => {
 
 	if (CELLS_W < 1 || CELLS_H < 1) return;
 
+	const mazeMapId = game.map.id;
+
 	let rngState = seed >>> 0;
 	const nextRandom = () => {
 		rngState = (rngState + 0x6D2B79F5) | 0;
@@ -82,9 +84,9 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
-		MazeDecorRareChance: 4,
-		MazeDecorSmallChance: 12,
-		MazeDecorBigChance: 6,
+		MazeDecorRareChance: 10,
+		MazeDecorSmallChance: 18,
+		MazeDecorBigChance: 22,
 		MazeRoomDensity: 15,
 		MazeLevelMin: 5,
 		MazeLevelMax: 10,
@@ -375,6 +377,19 @@ game => {
 		const spawnY = (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE;
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
+
+		if (!game.map.mapVars.MazeSpawned) {
+			game.map.mapVars.MazeSpawned = 1;
+			const applySpawn = () => {
+				if (game.map.id !== mazeMapId) return;
+				if (!game.render) {
+					setTimeout(applySpawn, 50);
+					return;
+				}
+				game.player.setPosition(spawnX, spawnY);
+			};
+			applySpawn();
+		}
 	}
 
 	if (pointB) {
@@ -396,53 +411,77 @@ game => {
 	addDoorExclusion(pointA);
 	addDoorExclusion(pointB);
 
-	const openness = (rx, ry) => {
+	const openNeighbors8 = (rx, ry) => {
 		let count = 0;
-		for (let oy = -2; oy <= 2; ++oy) {
-			for (let ox = -2; ox <= 2; ++ox) {
+		for (let oy = -1; oy <= 1; ++oy) {
+			for (let ox = -1; ox <= 1; ++ox) {
+				if (ox === 0 && oy === 0) continue;
 				if (isFloor(rx + ox, ry + oy)) ++count;
 			}
 		}
-		return count / 25;
+		return count;
 	};
 
-	const RARE_DECOR = ["4543/megasmallrock2", "4543/megasmallrock3"];
 	const RARE_DECOR_CHANCE = mazeVar("MazeDecorRareChance", MAZE_DEFAULTS.MazeDecorRareChance);
 	const SMALL_DECOR_CHANCE = mazeVar("MazeDecorSmallChance", MAZE_DEFAULTS.MazeDecorSmallChance);
 	const BIG_DECOR_CHANCE = mazeVar("MazeDecorBigChance", MAZE_DEFAULTS.MazeDecorBigChance);
+	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
+	const MEGA_DECOR_ITEM = "06mdfqot";
 	const DECOR_LAYER = "z10";
+	const DECOR_SPACING = 3;
 	let decorIndex = 0;
+
+	const markSpacing = (rx, ry) => {
+		for (let oy = -DECOR_SPACING; oy <= DECOR_SPACING; ++oy) {
+			for (let ox = -DECOR_SPACING; ox <= DECOR_SPACING; ++ox) decorExclusions.add(tileKey(rx + ox, ry + oy));
+		}
+	};
+
+	const solidTile = (rx, ry) => game.map.addObject(0, (ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE);
+
+	const bigAreaClear = (rx, ry) => {
+		for (let oy = -1; oy <= 2; ++oy) {
+			for (let ox = -1; ox <= 2; ++ox) {
+				if (!isFloor(rx + ox, ry + oy) || decorExclusions.has(tileKey(rx + ox, ry + oy))) return false;
+			}
+		}
+		return true;
+	};
 
 	for (let ry = 0; ry < realRows; ++ry) {
 		for (let rx = 0; rx < realCols; ++rx) {
 			if (!isFloor(rx, ry) || decorExclusions.has(tileKey(rx, ry))) continue;
 
-			const localOpen = openness(rx, ry);
 			const px = (ORIGIN_X + rx) * TILE_SIZE;
 			const py = (ORIGIN_Y + ry) * TILE_SIZE;
 
-			const bigFits = isFloor(rx + 1, ry) && isFloor(rx, ry + 1) && isFloor(rx + 1, ry + 1) &&
-				!decorExclusions.has(tileKey(rx + 1, ry)) && !decorExclusions.has(tileKey(rx, ry + 1)) && !decorExclusions.has(tileKey(rx + 1, ry + 1));
-
-			if (bigFits && localOpen > 0.5 && nextRandom() * 100 < BIG_DECOR_CHANCE * localOpen) {
+			if (bigAreaClear(rx, ry) && nextRandom() * 100 < BIG_DECOR_CHANCE) {
 				game.map.addObject(9, px + 8, py + 16, "mazeDecor" + decorIndex++, "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
-				decorExclusions.add(tileKey(rx, ry));
-				decorExclusions.add(tileKey(rx + 1, ry));
-				decorExclusions.add(tileKey(rx, ry + 1));
-				decorExclusions.add(tileKey(rx + 1, ry + 1));
+				solidTile(rx, ry);
+				solidTile(rx + 1, ry);
+				solidTile(rx, ry + 1);
+				solidTile(rx + 1, ry + 1);
+				markSpacing(rx, ry);
+				markSpacing(rx + 1, ry + 1);
 				continue;
 			}
 
-			if (nextRandom() * 100 < SMALL_DECOR_CHANCE * localOpen) {
+			if (openNeighbors8(rx, ry) < 6) continue;
+
+			if (nextRandom() * 100 < RARE_DECOR_CHANCE) {
+				const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
+				const smallUid = "mazeDecor" + decorIndex++;
+				game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
+				game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+				game.map.addObject(10, 3, smallUid, 1);
+				markSpacing(rx, ry);
+				continue;
+			}
+
+			if (nextRandom() * 100 < SMALL_DECOR_CHANCE) {
 				game.map.addObject(9, px, py, "mazeDecor" + decorIndex++, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
-				decorExclusions.add(tileKey(rx, ry));
-				continue;
-			}
-
-			if (nextRandom() * 100 < RARE_DECOR_CHANCE * localOpen) {
-				const sprite = RARE_DECOR[Math.floor(nextRandom() * RARE_DECOR.length)];
-				game.map.addObject(9, px, py, "mazeDecor" + decorIndex++, sprite, DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
-				decorExclusions.add(tileKey(rx, ry));
+				solidTile(rx, ry);
+				markSpacing(rx, ry);
 			}
 		}
 	}
