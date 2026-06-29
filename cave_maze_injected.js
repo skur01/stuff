@@ -84,7 +84,8 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
-		MazeDecorRareChance: 10,
+		MazeDecorRareChance: 2,
+		MazeDecorMegaMax: 2,
 		MazeDecorSmallChance: 18,
 		MazeDecorBigChance: 22,
 		MazeRoomDensity: 15,
@@ -411,18 +412,35 @@ game => {
 	addDoorExclusion(pointA);
 	addDoorExclusion(pointB);
 
-	const openNeighbors8 = (rx, ry) => {
-		let count = 0;
-		for (let oy = -1; oy <= 1; ++oy) {
-			for (let ox = -1; ox <= 1; ++ox) {
-				if (ox === 0 && oy === 0) continue;
-				if (isFloor(rx + ox, ry + oy)) ++count;
-			}
+	const floorRuns = (rx, ry) => {
+		const ring = [
+			isFloor(rx, ry - 1),
+			isFloor(rx + 1, ry - 1),
+			isFloor(rx + 1, ry),
+			isFloor(rx + 1, ry + 1),
+			isFloor(rx, ry + 1),
+			isFloor(rx - 1, ry + 1),
+			isFloor(rx - 1, ry),
+			isFloor(rx - 1, ry - 1)
+		];
+		let runs = 0;
+		for (let i = 0; i < 8; ++i) {
+			if (ring[i] && !ring[(i + 7) % 8]) ++runs;
 		}
-		return count;
+		return runs;
+	};
+
+	const isSafeToBlock = (rx, ry) => {
+		let orth = 0;
+		if (isFloor(rx, ry - 1)) ++orth;
+		if (isFloor(rx + 1, ry)) ++orth;
+		if (isFloor(rx, ry + 1)) ++orth;
+		if (isFloor(rx - 1, ry)) ++orth;
+		return orth >= 1 && floorRuns(rx, ry) <= 1;
 	};
 
 	const RARE_DECOR_CHANCE = mazeVar("MazeDecorRareChance", MAZE_DEFAULTS.MazeDecorRareChance);
+	const MEGA_DECOR_MAX = mazeVar("MazeDecorMegaMax", MAZE_DEFAULTS.MazeDecorMegaMax);
 	const SMALL_DECOR_CHANCE = mazeVar("MazeDecorSmallChance", MAZE_DEFAULTS.MazeDecorSmallChance);
 	const BIG_DECOR_CHANCE = mazeVar("MazeDecorBigChance", MAZE_DEFAULTS.MazeDecorBigChance);
 	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
@@ -430,6 +448,7 @@ game => {
 	const DECOR_LAYER = "z10";
 	const DECOR_SPACING = 3;
 	let decorIndex = 0;
+	let megaPlaced = 0;
 
 	const markSpacing = (rx, ry) => {
 		for (let oy = -DECOR_SPACING; oy <= DECOR_SPACING; ++oy) {
@@ -466,14 +485,15 @@ game => {
 				continue;
 			}
 
-			if (openNeighbors8(rx, ry) < 6) continue;
+			if (!isSafeToBlock(rx, ry)) continue;
 
-			if (nextRandom() * 100 < RARE_DECOR_CHANCE) {
+			if (megaPlaced < MEGA_DECOR_MAX && nextRandom() * 100 < RARE_DECOR_CHANCE) {
 				const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
 				const smallUid = "mazeDecor" + decorIndex++;
 				game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
 				game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
 				game.map.addObject(10, 3, smallUid, 1);
+				++megaPlaced;
 				markSpacing(rx, ry);
 				continue;
 			}
