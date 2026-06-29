@@ -446,7 +446,8 @@ game => {
 	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
 	const MEGA_DECOR_ITEM = "06mdfqot";
 	const DECOR_LAYER = "z10";
-	const DECOR_SPACING = 5;
+	const DECOR_SPACING_MIN = 2;
+	const DECOR_SPACING_MAX = 6;
 	let megaPlaced = 0;
 
 	game.__caveDecorUids = game.__caveDecorUids || [];
@@ -464,8 +465,9 @@ game => {
 	};
 
 	const markSpacing = (rx, ry) => {
-		for (let oy = -DECOR_SPACING; oy <= DECOR_SPACING; ++oy) {
-			for (let ox = -DECOR_SPACING; ox <= DECOR_SPACING; ++ox) decorExclusions.add(tileKey(rx + ox, ry + oy));
+		const radius = DECOR_SPACING_MIN + Math.floor(nextRandom() * (DECOR_SPACING_MAX - DECOR_SPACING_MIN + 1));
+		for (let oy = -radius; oy <= radius; ++oy) {
+			for (let ox = -radius; ox <= radius; ++ox) decorExclusions.add(tileKey(rx + ox, ry + oy));
 		}
 	};
 
@@ -480,42 +482,55 @@ game => {
 		return true;
 	};
 
+	const decorCandidates = [];
 	for (let ry = 0; ry < realRows; ++ry) {
 		for (let rx = 0; rx < realCols; ++rx) {
-			if (!isFloor(rx, ry) || decorExclusions.has(tileKey(rx, ry))) continue;
+			if (isFloor(rx, ry)) decorCandidates.push([rx, ry]);
+		}
+	}
+	for (let i = decorCandidates.length - 1; i > 0; --i) {
+		const j = Math.floor(nextRandom() * (i + 1));
+		const swap = decorCandidates[i];
+		decorCandidates[i] = decorCandidates[j];
+		decorCandidates[j] = swap;
+	}
 
-			const px = (ORIGIN_X + rx) * TILE_SIZE;
-			const py = (ORIGIN_Y + ry) * TILE_SIZE;
+	for (let c = 0; c < decorCandidates.length; ++c) {
+		const rx = decorCandidates[c][0];
+		const ry = decorCandidates[c][1];
+		if (decorExclusions.has(tileKey(rx, ry))) continue;
 
-			if (bigAreaClear(rx, ry) && nextRandom() * 100 < BIG_DECOR_CHANCE) {
-				game.map.addObject(9, px + 8, py + 16, nextDecorUid(), "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
-				solidTile(rx, ry);
-				solidTile(rx + 1, ry);
-				solidTile(rx, ry + 1);
-				solidTile(rx + 1, ry + 1);
-				markSpacing(rx, ry);
-				markSpacing(rx + 1, ry + 1);
-				continue;
-			}
+		const px = (ORIGIN_X + rx) * TILE_SIZE;
+		const py = (ORIGIN_Y + ry) * TILE_SIZE;
 
-			if (!isSafeToBlock(rx, ry)) continue;
+		if (bigAreaClear(rx, ry) && nextRandom() * 100 < BIG_DECOR_CHANCE) {
+			game.map.addObject(9, px + 8, py + 16, nextDecorUid(), "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
+			solidTile(rx, ry);
+			solidTile(rx + 1, ry);
+			solidTile(rx, ry + 1);
+			solidTile(rx + 1, ry + 1);
+			markSpacing(rx, ry);
+			markSpacing(rx + 1, ry + 1);
+			continue;
+		}
 
-			if (megaPlaced < MEGA_DECOR_MAX && nextRandom() * 100 < RARE_DECOR_CHANCE) {
-				const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
-				const smallUid = nextDecorUid();
-				game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
-				game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
-				game.map.addObject(10, 3, smallUid, 1);
-				++megaPlaced;
-				markSpacing(rx, ry);
-				continue;
-			}
+		if (!isSafeToBlock(rx, ry)) continue;
 
-			if (nextRandom() * 100 < SMALL_DECOR_CHANCE) {
-				game.map.addObject(9, px, py, nextDecorUid(), "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
-				solidTile(rx, ry);
-				markSpacing(rx, ry);
-			}
+		if (megaPlaced < MEGA_DECOR_MAX && nextRandom() * 100 < RARE_DECOR_CHANCE) {
+			const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
+			const smallUid = nextDecorUid();
+			game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
+			game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+			game.map.addObject(10, 3, smallUid, 1);
+			++megaPlaced;
+			markSpacing(rx, ry);
+			continue;
+		}
+
+		if (nextRandom() * 100 < SMALL_DECOR_CHANCE) {
+			game.map.addObject(9, px, py, nextDecorUid(), "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+			solidTile(rx, ry);
+			markSpacing(rx, ry);
 		}
 	}
 
