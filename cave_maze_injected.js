@@ -82,6 +82,9 @@ game => {
 		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
+		MazeDecorRareChance: 4,
+		MazeDecorSmallChance: 12,
+		MazeDecorBigChance: 6,
 		MazeRoomDensity: 15,
 		MazeLevelMin: 5,
 		MazeLevelMax: 10,
@@ -291,40 +294,27 @@ game => {
 	const colCenter = buildCenters(colLogical);
 	const rowCenter = buildCenters(rowLogical);
 
-	const MAZE_DIFFICULTY = mazeVar("MazeDifficulty", MAZE_DEFAULTS.MazeDifficulty) + MAZE_PROGRESS;
-	const ITEM_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
-	const ITEM_TABLE = [
-		{ uid: "06xa6ohm", minDifficulty: 0, baseChance: 60 },
-		{ uid: "06nsq383", minDifficulty: 3, baseChance: 30 },
-		{ uid: "06jq3b1m", minDifficulty: 6, baseChance: 15 }
-	];
+	const REWARD_ITEM = "06mdfqot";
+	const REWARD_ROCKS = ["4543/bigmegarock", "4543/megamedrock", "4543/megasmallrock1"];
+	const REWARD_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
 
-	const eligibleItems = ITEM_TABLE.filter(it => MAZE_DIFFICULTY >= it.minDifficulty);
-	if (eligibleItems.length) {
-		let totalItemWeight = 0;
-		for (const it of eligibleItems) totalItemWeight += it.baseChance;
+	const tileKey = (tx, ty) => ty * realCols + tx;
+	const occupiedTiles = new Set();
 
-		for (let cy = 0; cy < CELLS_H; ++cy) {
-			for (let cx = 0; cx < CELLS_W; ++cx) {
-				let degree = 0;
-				for (const dir of DIRS) {
-					if (open[cy * 2 + 1 + dir[1]][cx * 2 + 1 + dir[0]]) ++degree;
-				}
-				if (degree !== 1) continue;
-				if (nextRandom() * 100 >= ITEM_CHANCE) continue;
-
-				let roll = nextRandom() * totalItemWeight;
-				let acc = 0;
-				let chosen = eligibleItems[eligibleItems.length - 1];
-				for (const it of eligibleItems) {
-					acc += it.baseChance;
-					if (roll < acc) { chosen = it; break; }
-				}
-
-				const itemX = colCenter[cx * 2 + 1];
-				const itemY = rowCenter[cy * 2 + 1];
-				game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [chosen.uid, 1]);
+	for (let cy = 0; cy < CELLS_H; ++cy) {
+		for (let cx = 0; cx < CELLS_W; ++cx) {
+			let degree = 0;
+			for (const dir of DIRS) {
+				if (open[cy * 2 + 1 + dir[1]][cx * 2 + 1 + dir[0]]) ++degree;
 			}
+			if (degree !== 1) continue;
+			if (nextRandom() * 100 >= REWARD_CHANCE) continue;
+
+			const rockSprite = REWARD_ROCKS[Math.floor(nextRandom() * REWARD_ROCKS.length)];
+			const itemX = colCenter[cx * 2 + 1];
+			const itemY = rowCenter[cy * 2 + 1];
+			occupiedTiles.add(tileKey(itemX, itemY));
+			game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [REWARD_ITEM, 1], rockSprite);
 		}
 	}
 
@@ -394,6 +384,67 @@ game => {
 		game.map.ontile = "any";
 		game.map.addObject(7, warpX, warpY, "ev[MazeProgress]=+1&ev[MazeSeed]=0&warp=" + game.map.id + ",0");
 		game.map.ontile = prevOntile;
+	}
+
+	const decorExclusions = new Set(occupiedTiles);
+	const addDoorExclusion = (point) => {
+		if (!point) return;
+		for (let oy = -1; oy <= 1; ++oy) {
+			for (let ox = -1; ox <= 1; ++ox) decorExclusions.add(tileKey(point[0] + ox, point[1] + oy));
+		}
+	};
+	addDoorExclusion(pointA);
+	addDoorExclusion(pointB);
+
+	const openness = (rx, ry) => {
+		let count = 0;
+		for (let oy = -2; oy <= 2; ++oy) {
+			for (let ox = -2; ox <= 2; ++ox) {
+				if (isFloor(rx + ox, ry + oy)) ++count;
+			}
+		}
+		return count / 25;
+	};
+
+	const RARE_DECOR = ["4543/megasmallrock2", "4543/megasmallrock3"];
+	const RARE_DECOR_CHANCE = mazeVar("MazeDecorRareChance", MAZE_DEFAULTS.MazeDecorRareChance);
+	const SMALL_DECOR_CHANCE = mazeVar("MazeDecorSmallChance", MAZE_DEFAULTS.MazeDecorSmallChance);
+	const BIG_DECOR_CHANCE = mazeVar("MazeDecorBigChance", MAZE_DEFAULTS.MazeDecorBigChance);
+	const DECOR_LAYER = "z10";
+	let decorIndex = 0;
+
+	for (let ry = 0; ry < realRows; ++ry) {
+		for (let rx = 0; rx < realCols; ++rx) {
+			if (!isFloor(rx, ry) || decorExclusions.has(tileKey(rx, ry))) continue;
+
+			const localOpen = openness(rx, ry);
+			const px = (ORIGIN_X + rx) * TILE_SIZE;
+			const py = (ORIGIN_Y + ry) * TILE_SIZE;
+
+			const bigFits = isFloor(rx + 1, ry) && isFloor(rx, ry + 1) && isFloor(rx + 1, ry + 1) &&
+				!decorExclusions.has(tileKey(rx + 1, ry)) && !decorExclusions.has(tileKey(rx, ry + 1)) && !decorExclusions.has(tileKey(rx + 1, ry + 1));
+
+			if (bigFits && localOpen > 0.5 && nextRandom() * 100 < BIG_DECOR_CHANCE * localOpen) {
+				game.map.addObject(9, px + 8, py + 16, "mazeDecor" + decorIndex++, "4543/bignormalrock", DECOR_LAYER, 0, 0, 32, 32, 1, 1, 0);
+				decorExclusions.add(tileKey(rx, ry));
+				decorExclusions.add(tileKey(rx + 1, ry));
+				decorExclusions.add(tileKey(rx, ry + 1));
+				decorExclusions.add(tileKey(rx + 1, ry + 1));
+				continue;
+			}
+
+			if (nextRandom() * 100 < SMALL_DECOR_CHANCE * localOpen) {
+				game.map.addObject(9, px, py, "mazeDecor" + decorIndex++, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+				decorExclusions.add(tileKey(rx, ry));
+				continue;
+			}
+
+			if (nextRandom() * 100 < RARE_DECOR_CHANCE * localOpen) {
+				const sprite = RARE_DECOR[Math.floor(nextRandom() * RARE_DECOR.length)];
+				game.map.addObject(9, px, py, "mazeDecor" + decorIndex++, sprite, DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
+				decorExclusions.add(tileKey(rx, ry));
+			}
+		}
 	}
 
 	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
