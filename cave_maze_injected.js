@@ -36,15 +36,13 @@ game => {
 	const DOOR_B_X = 176;
 	const DOOR_B_Y = 2384;
 
-	let seed = game.map.eventVars["MazeSeed"] || 0;
-	if (!seed) {
-		seed = (Math.random() * 0xFFFFFFFF >>> 0) || 1;
-		game.trigger("ev[MazeSeed]=" + seed);
-	}
-
-	if (typeof game.map.eventVars["MazeProgress"] === "undefined") {
-		game.trigger("ev[MazeProgress]=0");
-	}
+	const now = new Date();
+	const dayNumber = Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) / 86400000);
+	let seed = dayNumber >>> 0;
+	seed = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b) >>> 0;
+	seed = Math.imul(seed ^ (seed >>> 16), 0x45d9f3b) >>> 0;
+	seed = (seed ^ (seed >>> 16)) >>> 0;
+	if (!seed) seed = 1;
 
 	const mapTilesW = Math.floor(game.map.width / TILE_SIZE) - ORIGIN_X;
 	const mapTilesH = Math.floor(game.map.height / TILE_SIZE) - ORIGIN_Y;
@@ -78,30 +76,25 @@ game => {
 	};
 
 	const MAZE_DEFAULTS = {
-		MazeIntensity: 65,
-		MazeBaseChaos: 12,
 		MazeMaxWidth: 7,
-		MazeDifficulty: 6,
-		MazeItemChance: 35,
-		MazeDecorRareChance: 2,
-		MazeDecorMegaMax: 2,
-		MazeScatterRewardChance: 1,
-		MazeScatterRewardMax: 1,
-		MazeMegaProgressStep: 5,
+		MazeRoomDensity: 15,
 		MazeDecorSmallChance: 10,
 		MazeDecorBigChance: 12,
-		MazeRoomDensity: 15
+		MazeVeinMin: 7,
+		MazeVeinMax: 10,
+		MazeVeinSpacing: 14,
+		MazeBigFromMedChance: 5,
+		MazeBattleVeinMax: 3,
+		MazeBattleVeinChance: 50
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
 	for (const name in MAZE_DEFAULTS) {
 		if (typeof game.map.mapVars[name] === "undefined") game.map.mapVars[name] = MAZE_DEFAULTS[name];
-		console.log("mapvar[" + name + "] = " + MAZE_DEFAULTS[name]);
 	}
 
-	const MAZE_PROGRESS = mazeVar("MazeProgress", 0);
-	const INTENSITY = Math.min(100, mazeVar("MazeIntensity", MAZE_DEFAULTS.MazeIntensity) + MAZE_PROGRESS * 10) / 100;
-	const BASE_CHAOS = Math.min(100, mazeVar("MazeBaseChaos", MAZE_DEFAULTS.MazeBaseChaos) + MAZE_PROGRESS * 5) / 100;
+	const INTENSITY = 0.3 + nextRandom() * 0.7;
+	const BASE_CHAOS = 0.05 + nextRandom() * 0.25;
 	const MAX_PASSAGE_WIDTH = mazeVar("MazeMaxWidth", MAZE_DEFAULTS.MazeMaxWidth);
 	const PASSAGE_WIDTHS = [3, 3];
 	for (let width = 5; width <= MAX_PASSAGE_WIDTH; width += 2) PASSAGE_WIDTHS.push(width);
@@ -294,42 +287,87 @@ game => {
 	const rowCenter = buildCenters(rowLogical);
 
 	const REWARD_ITEM = "06mdfqot";
-	const REWARD_ROCKS = [
-		{ sprite: "4543/megasmallrock1", amount: 2, weight: 60 },
-		{ sprite: "4543/megamedrock", amount: 4, weight: 30 },
-		{ sprite: "4543/bigmegarock", amount: 8, weight: 10 }
-	];
-	const REWARD_CHANCE = mazeVar("MazeItemChance", MAZE_DEFAULTS.MazeItemChance);
-
-	const pickRewardRock = () => {
-		let total = 0;
-		for (const r of REWARD_ROCKS) total += r.weight;
-		let roll = nextRandom() * total;
-		for (const r of REWARD_ROCKS) {
-			roll -= r.weight;
-			if (roll < 0) return r;
-		}
-		return REWARD_ROCKS[REWARD_ROCKS.length - 1];
-	};
+	const ROCK_SMALL1 = { sprite: "4543/megasmallrock1", amount: 2 };
+	const ROCK_MED = { sprite: "4543/megamedrock", amount: 4 };
+	const ROCK_BIG = { sprite: "4543/bigmegarock", amount: 8 };
 
 	const tileKey = (tx, ty) => ty * realCols + tx;
 	const occupiedTiles = new Set();
 
-	for (let cy = 0; cy < CELLS_H; ++cy) {
-		for (let cx = 0; cx < CELLS_W; ++cx) {
-			let degree = 0;
-			for (const dir of DIRS) {
-				if (open[cy * 2 + 1 + dir[1]][cx * 2 + 1 + dir[0]]) ++degree;
-			}
-			if (degree !== 1) continue;
-			if (nextRandom() * 100 >= REWARD_CHANCE) continue;
-
-			const rock = pickRewardRock();
-			const itemX = colCenter[cx * 2 + 1];
-			const itemY = rowCenter[cy * 2 + 1];
-			occupiedTiles.add(tileKey(itemX, itemY));
-			game.map.addObject(14, (ORIGIN_X + itemX) * TILE_SIZE, (ORIGIN_Y + itemY) * TILE_SIZE, [REWARD_ITEM, rock.amount], rock.sprite);
+	const veinCandidates = [];
+	for (let ry = 0; ry < realRows; ++ry) {
+		for (let rx = 0; rx < realCols; ++rx) {
+			if (isFloor(rx, ry)) veinCandidates.push([rx, ry]);
 		}
+	}
+	for (let i = veinCandidates.length - 1; i > 0; --i) {
+		const j = Math.floor(nextRandom() * (i + 1));
+		const swap = veinCandidates[i];
+		veinCandidates[i] = veinCandidates[j];
+		veinCandidates[j] = swap;
+	}
+
+	const VEIN_SPACING = mazeVar("MazeVeinSpacing", MAZE_DEFAULTS.MazeVeinSpacing);
+	const BIG_FROM_MED_CHANCE = mazeVar("MazeBigFromMedChance", MAZE_DEFAULTS.MazeBigFromMedChance);
+	const placedVeins = [];
+
+	const farFromVeins = (rx, ry) => {
+		for (const v of placedVeins) {
+			const dx = v[0] - rx;
+			const dy = v[1] - ry;
+			if (dx * dx + dy * dy < VEIN_SPACING * VEIN_SPACING) return false;
+		}
+		return true;
+	};
+
+	const veinMin = mazeVar("MazeVeinMin", MAZE_DEFAULTS.MazeVeinMin);
+	const veinMax = mazeVar("MazeVeinMax", MAZE_DEFAULTS.MazeVeinMax);
+	const rewardVeinTarget = veinMin + Math.floor(nextRandom() * (veinMax - veinMin + 1));
+
+	let rewardVeinsPlaced = 0;
+	for (let c = 0; c < veinCandidates.length && rewardVeinsPlaced < rewardVeinTarget; ++c) {
+		const rx = veinCandidates[c][0];
+		const ry = veinCandidates[c][1];
+		if (!farFromVeins(rx, ry)) continue;
+
+		let rock = nextRandom() < 0.5 ? ROCK_SMALL1 : ROCK_MED;
+		if (rock === ROCK_MED && nextRandom() * 100 < BIG_FROM_MED_CHANCE) rock = ROCK_BIG;
+
+		game.map.addObject(14, (ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, [REWARD_ITEM, rock.amount], rock.sprite);
+		placedVeins.push([rx, ry]);
+		occupiedTiles.add(tileKey(rx, ry));
+		++rewardVeinsPlaced;
+	}
+
+	const battleVeinMax = mazeVar("MazeBattleVeinMax", MAZE_DEFAULTS.MazeBattleVeinMax);
+	const battleVeinChance = mazeVar("MazeBattleVeinChance", MAZE_DEFAULTS.MazeBattleVeinChance);
+	for (let b = 0; b < battleVeinMax; ++b) {
+		if (nextRandom() * 100 >= battleVeinChance) continue;
+		for (let c = 0; c < veinCandidates.length; ++c) {
+			const rx = veinCandidates[c][0];
+			const ry = veinCandidates[c][1];
+			if (!farFromVeins(rx, ry)) continue;
+			game.map.addObject(21, (ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, "loot", "4543/megamedrock");
+			placedVeins.push([rx, ry]);
+			occupiedTiles.add(tileKey(rx, ry));
+			break;
+		}
+	}
+
+	if (!game.map.__dailyRockWrap && typeof game.map.useRockSmash === "function") {
+		game.map.__dailyRockWrap = true;
+		const origUseRockSmash = game.map.useRockSmash;
+		game.map.useRockSmash = function(obj) {
+			if (obj && obj.rocksmashEncounterList === "loot") {
+				this.smashedRocks[this.id + "," + obj.x + "," + obj.y] = true;
+				this.game.player.canMove = false;
+				this.game.player.encountered = 30;
+				obj.remove();
+				this.findEncounter("loot");
+				return;
+			}
+			return origUseRockSmash.call(this, obj);
+		};
 	}
 
 	const doorCandidates = [];
@@ -386,15 +424,6 @@ game => {
 		}
 	}
 
-	if (pointB) {
-		const warpX = (ORIGIN_X + pointB[0]) * TILE_SIZE;
-		const warpY = (ORIGIN_Y + pointB[1] + 1) * TILE_SIZE;
-		const prevOntile = game.map.ontile;
-		game.map.ontile = "any";
-		game.map.addObject(7, warpX, warpY, "ev[MazeProgress]=+1&ev[MazeSeed]=0&warp=" + game.map.id + ",0");
-		game.map.ontile = prevOntile;
-	}
-
 	const decorExclusions = new Set(occupiedTiles);
 	const addDoorExclusion = (point) => {
 		if (!point) return;
@@ -432,28 +461,11 @@ game => {
 		return orth >= 1 && floorRuns(rx, ry) <= 1;
 	};
 
-	const RARE_DECOR_CHANCE = mazeVar("MazeDecorRareChance", MAZE_DEFAULTS.MazeDecorRareChance);
-	const MEGA_DECOR_MAX = mazeVar("MazeDecorMegaMax", MAZE_DEFAULTS.MazeDecorMegaMax);
-	const SCATTER_REWARD_CHANCE = mazeVar("MazeScatterRewardChance", MAZE_DEFAULTS.MazeScatterRewardChance);
-	const SCATTER_REWARD_MAX = mazeVar("MazeScatterRewardMax", MAZE_DEFAULTS.MazeScatterRewardMax);
 	const SMALL_DECOR_CHANCE = mazeVar("MazeDecorSmallChance", MAZE_DEFAULTS.MazeDecorSmallChance);
 	const BIG_DECOR_CHANCE = mazeVar("MazeDecorBigChance", MAZE_DEFAULTS.MazeDecorBigChance);
-	const MEGA_ROCKS = ["4543/megasmallrock2", "4543/megasmallrock3"];
-	const MEGA_DECOR_ITEM = "06mdfqot";
 	const DECOR_LAYER = "z10";
 	const DECOR_SPACING_MIN = 2;
 	const DECOR_SPACING_MAX = 6;
-	let megaPlaced = 0;
-	let scatterRewardPlaced = 0;
-
-	const MEGA_PROGRESS_STEP = mazeVar("MazeMegaProgressStep", MAZE_DEFAULTS.MazeMegaProgressStep);
-	const MEGA_CHANCE_RATE = 0.02;
-	const MEGA_CHANCE_MULT_MAX = 3;
-	const MEGA_CAP_GROWTH_MAX = 5;
-	const megaChanceMult = Math.min(MEGA_CHANCE_MULT_MAX, 1 + MAZE_PROGRESS * MEGA_CHANCE_RATE);
-	const megaCapGrowth = Math.min(MEGA_CAP_GROWTH_MAX, Math.floor(MAZE_PROGRESS / MEGA_PROGRESS_STEP));
-	const scatterRewardMaxNow = SCATTER_REWARD_MAX + megaCapGrowth;
-	const megaDecorMaxNow = MEGA_DECOR_MAX + megaCapGrowth;
 
 	game.__caveDecorUids = game.__caveDecorUids || [];
 	for (let i = 0; i < game.__caveDecorUids.length; ++i) {
@@ -520,25 +532,6 @@ game => {
 		}
 
 		if (!isSafeToBlock(rx, ry)) continue;
-
-		if (scatterRewardPlaced < scatterRewardMaxNow && nextRandom() * 100 < SCATTER_REWARD_CHANCE * megaChanceMult) {
-			const rock = pickRewardRock();
-			game.map.addObject(14, px, py, [REWARD_ITEM, rock.amount], rock.sprite);
-			++scatterRewardPlaced;
-			markSpacing(rx, ry);
-			continue;
-		}
-
-		if (megaPlaced < megaDecorMaxNow && nextRandom() * 100 < RARE_DECOR_CHANCE * megaChanceMult) {
-			const mega = MEGA_ROCKS[Math.floor(nextRandom() * MEGA_ROCKS.length)];
-			const smallUid = nextDecorUid();
-			game.map.addObject(14, px, py, [MEGA_DECOR_ITEM, 1], mega);
-			game.map.addObject(9, px, py, smallUid, "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
-			game.map.addObject(10, 3, smallUid, 1);
-			++megaPlaced;
-			markSpacing(rx, ry);
-			continue;
-		}
 
 		if (nextRandom() * 100 < SMALL_DECOR_CHANCE) {
 			game.map.addObject(9, px, py, nextDecorUid(), "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
@@ -668,7 +661,6 @@ game => {
 			}
 		};
 		drawDoor(pointA, DOOR_A_X, DOOR_A_Y, null);
-		drawDoor(pointB, DOOR_B_X, DOOR_B_Y, "rgba(220,40,40,0.55)");
 
 		const sprite = new PIXI.Sprite(PIXI.Texture.from(canvas));
 		sprite.position.x = ORIGIN_X * TILE_SIZE;
