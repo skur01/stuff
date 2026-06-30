@@ -81,7 +81,6 @@ game => {
 		MazeIntensity: 65,
 		MazeBaseChaos: 12,
 		MazeMaxWidth: 7,
-		MazeEncounterSpacing: 1,
 		MazeDifficulty: 6,
 		MazeItemChance: 35,
 		MazeDecorRareChance: 2,
@@ -91,13 +90,7 @@ game => {
 		MazeMegaProgressStep: 5,
 		MazeDecorSmallChance: 10,
 		MazeDecorBigChance: 12,
-		MazeRoomDensity: 15,
-		MazeLevelMin: 5,
-		MazeLevelMax: 10,
-		MazeLevelStep: 3,
-		autoevolve_all: 1,
-		overworld_encounters_max_mons: 5,
-		encounter_chance: 5
+		MazeRoomDensity: 15
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
@@ -339,24 +332,6 @@ game => {
 		}
 	}
 
-	const ENCOUNTER_LIST = "encounters";
-	const ENCOUNTER_SPACING = Math.max(1, mazeVar("MazeEncounterSpacing", MAZE_DEFAULTS.MazeEncounterSpacing));
-	const keepChance = 1 / (ENCOUNTER_SPACING * ENCOUNTER_SPACING);
-
-	if (typeof game.map.__mazeBaseEncounters === "undefined") {
-		game.map.__mazeBaseEncounters = (game.map.overworldEncounters || []).slice();
-	}
-
-	const overworldPoints = game.map.__mazeBaseEncounters.slice();
-	for (let ry = 0; ry < realRows; ++ry) {
-		for (let rx = 0; rx < realCols; ++rx) {
-			if (isFloor(rx, ry) && (ENCOUNTER_SPACING <= 1 || nextRandom() < keepChance)) {
-				overworldPoints.push([(ORIGIN_X + rx) * TILE_SIZE, (ORIGIN_Y + ry) * TILE_SIZE, ENCOUNTER_LIST]);
-			}
-		}
-	}
-	game.map.overworldEncounters = overworldPoints;
-
 	const doorCandidates = [];
 	for (let ry = 2; ry < realRows - 2; ++ry) {
 		for (let rx = 2; rx < realCols - 2; ++rx) {
@@ -569,148 +544,6 @@ game => {
 			game.map.addObject(9, px, py, nextDecorUid(), "4543/smallnormalrock", DECOR_LAYER, 0, 0, 16, 16, 1, 1, 0);
 			solidTile(rx, ry);
 			markSpacing(rx, ry);
-		}
-	}
-
-	const REGION_UID = (typeof REGION !== "undefined" && REGION && REGION.uid) ? REGION.uid : null;
-	const AUTO_EVOLVE = mazeVar("autoevolve_all", MAZE_DEFAULTS.autoevolve_all);
-
-	const levelMin = mazeVar("MazeLevelMin", MAZE_DEFAULTS.MazeLevelMin) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
-	const levelMax = mazeVar("MazeLevelMax", MAZE_DEFAULTS.MazeLevelMax) + MAZE_PROGRESS * mazeVar("MazeLevelStep", MAZE_DEFAULTS.MazeLevelStep);
-
-	const rollEncounterLevel = () => {
-		const lo = Math.max(1, Math.min(100, levelMin));
-		const hi = Math.max(lo, Math.min(100, levelMax));
-		return lo + Math.floor(Math.random() * (hi - lo + 1));
-	};
-
-	const LEVEL_TOKENS = ["l", "lv", "level", "levels", "d", "dynamic-level"];
-	const setMonLevel = (monStr, level) => {
-		const parts = monStr.split(";");
-		const kept = [parts[0]];
-		for (let p = 1; p < parts.length; ++p) {
-			if (LEVEL_TOKENS.indexOf(parts[p].split(" ")[0]) === -1) kept.push(parts[p]);
-		}
-		kept.push("l " + level);
-		return kept.join(";");
-	};
-
-	const pickSplitEvo = (candidates) => candidates[Math.floor(Math.random() * candidates.length)];
-
-	const processEvoUid = (uid, level, depth, lastLevelEvoLvl, cb) => {
-		if (depth > 5) {
-			cb(uid);
-			return;
-		}
-		getMon(uid, monObj => {
-			const data = monObj && monObj.data;
-			if (!data || !data.evolutions || !data.evolutions.length) {
-				cb(uid);
-				return;
-			}
-
-			const levelCandidates = data.evolutions.filter(evo => evo[1] === 0 && level >= +evo[2] && (!evo[3] || evo[3] === REGION_UID));
-			const nonLevelCandidates = data.evolutions.filter(evo => evo[1] !== 35 && evo[1] !== 0 && (!evo[3] || evo[3] === REGION_UID));
-
-			let evoTarget = null;
-			let evoLevel = null;
-			let isLevelEvo = false;
-
-			const pickLevel = () => {
-				if (levelCandidates.length) {
-					const picked = pickSplitEvo(levelCandidates);
-					evoTarget = picked[0];
-					evoLevel = +picked[2];
-					isLevelEvo = true;
-				}
-			};
-
-			const pickNonLevel = () => {
-				if (nonLevelCandidates.length === 1) {
-					evoTarget = nonLevelCandidates[0][0];
-				} else if (nonLevelCandidates.length > 1) {
-					const methodGroups = {};
-					for (const evo of nonLevelCandidates) {
-						if (!methodGroups[evo[1]]) methodGroups[evo[1]] = [];
-						methodGroups[evo[1]].push(evo);
-					}
-					const splitGroup = Object.values(methodGroups).find(g => g.length > 1);
-					evoTarget = pickSplitEvo(splitGroup || nonLevelCandidates)[0];
-				}
-			};
-
-			if (AUTO_EVOLVE === 3) {
-				const allCandidates = levelCandidates.concat(nonLevelCandidates);
-				if (allCandidates.length) {
-					const picked = pickSplitEvo(allCandidates);
-					evoTarget = picked[0];
-					if (picked[1] === 0) {
-						evoLevel = +picked[2];
-						isLevelEvo = true;
-					}
-				}
-			} else if (AUTO_EVOLVE === 4) {
-				pickLevel();
-			} else if (AUTO_EVOLVE === 2) {
-				pickNonLevel();
-				if (!evoTarget) pickLevel();
-			} else {
-				pickLevel();
-				if (!evoTarget && nonLevelCandidates.length) evoTarget = nonLevelCandidates[0][0];
-			}
-
-			if (!evoTarget) {
-				cb(uid);
-				return;
-			}
-
-			getMon(evoTarget, evolved => {
-				if (!evolved || !evolved.data) {
-					cb(uid);
-					return;
-				}
-
-				if (!isLevelEvo) {
-					if (lastLevelEvoLvl !== null) {
-						evoLevel = lastLevelEvoLvl + 20;
-					} else {
-						const hasNextEvo = evolved.data.evolutions && evolved.data.evolutions.length > 0;
-						evoLevel = depth >= 1 ? 38 : (hasNextEvo ? 20 : 31);
-					}
-				}
-
-				if (level < evoLevel) {
-					cb(uid);
-					return;
-				}
-
-				processEvoUid(evoTarget, level, depth + 1, isLevelEvo ? evoLevel : lastLevelEvoLvl, cb);
-			});
-		});
-	};
-
-	if (!game.map.__mazeEvoSkin && typeof getMon === "function") {
-		game.map.__mazeEvoSkin = true;
-		const origAddOverworldMon = game.map.addOverworldMon;
-		if (typeof origAddOverworldMon === "function") {
-			game.map.addOverworldMon = function(attr, mon, battleAttr) {
-				const self = this;
-				if (battleAttr && battleAttr.length >= 4) {
-					battleAttr[3] = (battleAttr[3] ? battleAttr[3] + ";" : "") + "nocatch;norun";
-				}
-				const level = rollEncounterLevel();
-				const leveledMon = setMonLevel(mon, level);
-				const baseUid = leveledMon.split(";")[0];
-				processEvoUid(baseUid, level, 0, null, evolvedUid => {
-					let finalMon = leveledMon;
-					if (evolvedUid && evolvedUid !== baseUid) {
-						const parts = leveledMon.split(";");
-						parts[0] = evolvedUid;
-						finalMon = parts.join(";");
-					}
-					origAddOverworldMon.call(self, attr, finalMon, battleAttr);
-				});
-			};
 		}
 	}
 
