@@ -104,9 +104,9 @@ game => {
 		MazeBigFromMedChance: 5,
 		MazeBattleVeinMax: 3,
 		MazeBattleVeinChance: 50,
-		MazeHoleTraps: 4,
-		MazePitfallTraps: 4,
-		MazeMoveTraps: 5
+		MazeHoleTraps: 9,
+		MazePitfallTraps: 9,
+		MazeMoveTraps: 10
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
