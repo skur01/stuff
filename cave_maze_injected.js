@@ -104,9 +104,9 @@ game => {
 		MazeBigFromMedChance: 5,
 		MazeBattleVeinMax: 3,
 		MazeBattleVeinChance: 50,
-		MazeHoleTraps: 9,
-		MazePitfallTraps: 9,
-		MazeMoveTraps: 10
+		MazeHoleTraps: 4,
+		MazePitfallTraps: 4,
+		MazeMoveTraps: 5
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
@@ -469,6 +469,8 @@ game => {
 	const PITFALL_TRAP_COLOR = 0xff3333;
 	const MOVE_TRAP_COLOR = 0xffcc00;
 	const PITFALL_ESCAPE_PRESSES = 5;
+	const PITFALL_SHAKE_OFFSET = 2;
+	const PITFALL_SHAKE_DURATION = 60;
 	const TRAP_SQUARE_DEPTH = -1;
 	const TRAP_COLORS = { hole: HOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, move: MOVE_TRAP_COLOR };
 	const TRAP_MESSAGES = {
@@ -549,8 +551,11 @@ game => {
 		const cb = (event) => {
 			if (event.which !== jumpKey || event.repeat) return;
 			++presses;
+			game.player.offset.custom.x = (presses % 2 === 0) ? PITFALL_SHAKE_OFFSET : -PITFALL_SHAKE_OFFSET;
+			setTimeout(() => { game.player.offset.custom.x = 0; }, PITFALL_SHAKE_DURATION);
 			if (presses >= PITFALL_ESCAPE_PRESSES) {
 				document.removeEventListener("keydown", cb);
+				game.player.offset.custom.x = 0;
 				game.player.canMove = true;
 				game.map.__mazePitfallActive = false;
 			}
@@ -559,6 +564,9 @@ game => {
 	};
 
 	const triggerTrap = (type, px, py) => {
+		if (game.player.ontiled) return;
+		game.player.ontiled = true;
+
 		revealTrapSquare(px, py, TRAP_COLORS[type]);
 		game.triggerMessage(TRAP_MESSAGES[type]);
 
