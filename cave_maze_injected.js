@@ -104,9 +104,9 @@ game => {
 		MazeBigFromMedChance: 5,
 		MazeBattleVeinMax: 3,
 		MazeBattleVeinChance: 50,
-		MazeHoleTraps: 9,
-		MazePitfallTraps: 9,
-		MazeMoveTraps: 10
+		MazeDropHoleTraps: 4,
+		MazePitfallTraps: 4,
+		MazeSlideTraps: 5
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
@@ -465,25 +465,26 @@ game => {
 	// tile. They stay armed so they can trigger again. The "showtraps" var reveals every trap up
 	// front for debugging. Control traps are intentionally absent: reversing/altering the player's
 	// controls has no existing engine hook, so that type needs an input change before it can exist.
-	const HOLE_TRAP_COLOR = 0x3366ff;
+	const DROPHOLE_TRAP_COLOR = 0x3366ff;
 	const PITFALL_TRAP_COLOR = 0xff3333;
-	const MOVE_TRAP_COLOR = 0xffcc00;
+	const SLIDE_TRAP_COLOR = 0xffcc00;
 	const PITFALL_ESCAPE_PRESSES = 5;
 	const PITFALL_SHAKE_OFFSET = 2;
 	const PITFALL_SHAKE_DURATION = 60;
+	const SLIDE_TRAP_TILES = 12;
 	const TRAP_SQUARE_DEPTH = -1;
-	const TRAP_COLORS = { hole: HOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, move: MOVE_TRAP_COLOR };
+	const TRAP_COLORS = { drophole: DROPHOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, slide: SLIDE_TRAP_COLOR };
 	const TRAP_MESSAGES = {
-		hole: "You triggered a hole trap!",
+		drophole: "You triggered a drop hole trap!",
 		pitfall: "You triggered a pitfall trap!",
-		move: "You triggered a movement trap!"
+		slide: "You triggered a slide trap!"
 	};
 
 	const showTraps = !!game.showtraps || !!mazeVar("showtraps", 0);
 	console.log("[traps] showTraps =", showTraps, "| game.showtraps =", game.showtraps, "| mazeVar showtraps =", mazeVar("showtraps", 0), "| eventVars.showtraps =", game.map.eventVars["showtraps"]);
-	const holeTrapCount = mazeVar("MazeHoleTraps", MAZE_DEFAULTS.MazeHoleTraps);
+	const dropHoleTrapCount = mazeVar("MazeDropHoleTraps", MAZE_DEFAULTS.MazeDropHoleTraps);
 	const pitfallTrapCount = mazeVar("MazePitfallTraps", MAZE_DEFAULTS.MazePitfallTraps);
-	const moveTrapCount = mazeVar("MazeMoveTraps", MAZE_DEFAULTS.MazeMoveTraps);
+	const slideTrapCount = mazeVar("MazeSlideTraps", MAZE_DEFAULTS.MazeSlideTraps);
 
 	const holeTargetX = pointA ? (ORIGIN_X + pointA[0]) * TILE_SIZE : ORIGIN_X * TILE_SIZE;
 	const holeTargetY = pointA ? (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE : ORIGIN_Y * TILE_SIZE;
@@ -536,9 +537,9 @@ game => {
 		console.log("[traps] placed", placed, "of", count, type, "traps in", attempts, "attempts | realCols/realRows", realCols, realRows);
 	};
 
-	placeTraps("hole", holeTrapCount);
+	placeTraps("drophole", dropHoleTrapCount);
 	placeTraps("pitfall", pitfallTrapCount);
-	placeTraps("move", moveTrapCount);
+	placeTraps("slide", slideTrapCount);
 
 	// Freezes the player until they mash the jump key free
 	const startPitfall = () => {
@@ -563,21 +564,50 @@ game => {
 		document.addEventListener("keydown", cb);
 	};
 
+	// Slides the player in a random direction, stopping at a wall or after a tile cap
+	const startSlideTrap = () => {
+		const dir = 1 + Math.floor(nextRandom() * 4);
+		const startX = game.player.x;
+		const startY = game.player.y;
+		const maxPixels = SLIDE_TRAP_TILES * TILE_SIZE;
+
+		game.player.makeSlide(dir, false, false, 1);
+
+		const cb = () => {
+			if (!game.player.sliding) return;
+			const dist = Math.max(Math.abs(game.player.x - startX), Math.abs(game.player.y - startY));
+			if (dist >= maxPixels) {
+				game.player.makeSlide(0);
+				return;
+			}
+			requestAnimationFrame(cb);
+		};
+		requestAnimationFrame(cb);
+	};
+
+	// Fades out, drops the player back at the entrance, then fades in as they fall into it
+	const startDropHole = () => {
+		game.fade(1, "#000", () => {
+			game.player.setPosition(holeTargetX, holeTargetY);
+			game.player.fall(false);
+			game.fade(0, "#000");
+		});
+	};
+
 	const triggerTrap = (type, px, py) => {
 		if (game.player.ontiled) return;
 		game.player.ontiled = true;
 
 		revealTrapSquare(px, py, TRAP_COLORS[type]);
-		game.triggerMessage(TRAP_MESSAGES[type]);
-
-		if (type === "hole") {
-			game.player.setPosition(holeTargetX, holeTargetY);
-		} else if (type === "pitfall") {
-			startPitfall();
-		} else if (type === "move") {
-			const dir = 1 + Math.floor(nextRandom() * 4);
-			game.player.makeSlide(dir, false, false, 1);
-		}
+		game.textbox.say(TRAP_MESSAGES[type], () => {
+			if (type === "drophole") {
+				startDropHole();
+			} else if (type === "pitfall") {
+				startPitfall();
+			} else if (type === "slide") {
+				startSlideTrap();
+			}
+		});
 	};
 
 	game.map.__mazeTriggerTrap = triggerTrap;
