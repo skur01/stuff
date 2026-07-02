@@ -471,6 +471,11 @@ game => {
 	const PITFALL_ESCAPE_PRESSES = 5;
 	const TRAP_SQUARE_DEPTH = -1;
 	const TRAP_COLORS = { hole: HOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, move: MOVE_TRAP_COLOR };
+	const TRAP_MESSAGES = {
+		hole: "You triggered a hole trap!",
+		pitfall: "You triggered a pitfall trap!",
+		move: "You triggered a movement trap!"
+	};
 
 	const showTraps = !!game.showtraps || !!mazeVar("showtraps", 0);
 	console.log("[traps] showTraps =", showTraps, "| game.showtraps =", game.showtraps, "| mazeVar showtraps =", mazeVar("showtraps", 0), "| eventVars.showtraps =", game.map.eventVars["showtraps"]);
@@ -555,6 +560,7 @@ game => {
 
 	const triggerTrap = (type, px, py) => {
 		revealTrapSquare(px, py, TRAP_COLORS[type]);
+		game.triggerMessage(TRAP_MESSAGES[type]);
 
 		if (type === "hole") {
 			game.player.setPosition(holeTargetX, holeTargetY);
