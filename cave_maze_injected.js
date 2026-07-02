@@ -45,7 +45,6 @@ game => {
 	if (!seed) seed = 1;
 
 	const dayChanged = +game.map.eventVars["MazeDay"] !== dayNumber;
-	const isRefresh = !!game.map.refreshed;
 
 	// On a new daily seed, clear only this map's found items so a fresh vein is never
 	// suppressed by a stale looted position left over from a previous day's layout
@@ -435,7 +434,8 @@ game => {
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
 
-		if (dayChanged || !isRefresh) {
+		if (!game.map.mapVars.MazeSpawned || dayChanged) {
+			game.map.mapVars.MazeSpawned = 1;
 			const applySpawn = () => {
 				if (game.map.id !== mazeMapId) return;
 				if (!game.render) {
