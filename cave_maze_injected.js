@@ -473,6 +473,7 @@ game => {
 	const TRAP_COLORS = { hole: HOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, move: MOVE_TRAP_COLOR };
 
 	const showTraps = !!game.showtraps || !!mazeVar("showtraps", 0);
+	console.log("[traps] showTraps =", showTraps, "| game.showtraps =", game.showtraps, "| mazeVar showtraps =", mazeVar("showtraps", 0), "| eventVars.showtraps =", game.map.eventVars["showtraps"]);
 	const holeTrapCount = mazeVar("MazeHoleTraps", MAZE_DEFAULTS.MazeHoleTraps);
 	const pitfallTrapCount = mazeVar("MazePitfallTraps", MAZE_DEFAULTS.MazePitfallTraps);
 	const moveTrapCount = mazeVar("MazeMoveTraps", MAZE_DEFAULTS.MazeMoveTraps);
@@ -501,6 +502,7 @@ game => {
 		square.position.x = px;
 		square.position.y = py;
 		square.depth = TRAP_SQUARE_DEPTH;
+		console.log("[traps] reveal square at", px, py, "color", color.toString(16), "| bottomSprites?", !!(game.containers && game.containers.bottomSprites));
 		game.containers.bottomSprites.addChild(square);
 		game.map.__mazeTrapSquares.push(square);
 	};
@@ -524,6 +526,7 @@ game => {
 			if (showTraps) revealTrapSquare(px, py, TRAP_COLORS[type]);
 			++placed;
 		}
+		console.log("[traps] placed", placed, "of", count, type, "traps in", attempts, "attempts | realCols/realRows", realCols, realRows);
 	};
 
 	placeTraps("hole", holeTrapCount);
