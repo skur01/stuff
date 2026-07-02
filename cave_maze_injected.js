@@ -103,7 +103,10 @@ game => {
 		MazeVeinSpacing: 14,
 		MazeBigFromMedChance: 5,
 		MazeBattleVeinMax: 3,
-		MazeBattleVeinChance: 50
+		MazeBattleVeinChance: 50,
+		MazeHoleTraps: 4,
+		MazePitfallTraps: 4,
+		MazeMoveTraps: 5
 	};
 
 	game.map.mapVars = game.map.mapVars || {};
@@ -457,6 +460,124 @@ game => {
 	};
 	addDoorExclusion(pointA);
 	addDoorExclusion(pointB);
+
+	// Traps are hidden until stepped on, at which point a placeholder colored square marks the
+	// tile. They stay armed so they can trigger again. The "showtraps" var reveals every trap up
+	// front for debugging. Control traps are intentionally absent: reversing/altering the player's
+	// controls has no existing engine hook, so that type needs an input change before it can exist.
+	const HOLE_TRAP_COLOR = 0x3366ff;
+	const PITFALL_TRAP_COLOR = 0xff3333;
+	const MOVE_TRAP_COLOR = 0xffcc00;
+	const PITFALL_ESCAPE_PRESSES = 5;
+	const TRAP_SQUARE_DEPTH = -1;
+	const TRAP_COLORS = { hole: HOLE_TRAP_COLOR, pitfall: PITFALL_TRAP_COLOR, move: MOVE_TRAP_COLOR };
+
+	const showTraps = !!game.showtraps || !!mazeVar("showtraps", 0);
+	const holeTrapCount = mazeVar("MazeHoleTraps", MAZE_DEFAULTS.MazeHoleTraps);
+	const pitfallTrapCount = mazeVar("MazePitfallTraps", MAZE_DEFAULTS.MazePitfallTraps);
+	const moveTrapCount = mazeVar("MazeMoveTraps", MAZE_DEFAULTS.MazeMoveTraps);
+
+	const holeTargetX = pointA ? (ORIGIN_X + pointA[0]) * TILE_SIZE : ORIGIN_X * TILE_SIZE;
+	const holeTargetY = pointA ? (ORIGIN_Y + pointA[1] + 1) * TILE_SIZE : ORIGIN_Y * TILE_SIZE;
+
+	game.map.__mazeTrapSquares = game.map.__mazeTrapSquares || [];
+	for (const square of game.map.__mazeTrapSquares) {
+		if (square.parent) square.parent.removeChild(square);
+	}
+	game.map.__mazeTrapSquares = [];
+
+	game.map.__mazeTraps = {};
+	const revealedTraps = {};
+
+	const revealTrapSquare = (px, py, color) => {
+		const revealKey = px + "," + py;
+		if (revealedTraps[revealKey]) return;
+		revealedTraps[revealKey] = true;
+
+		const square = new PIXI.Sprite(PIXI.Texture.WHITE);
+		square.tint = color;
+		square.width = TILE_SIZE;
+		square.height = TILE_SIZE;
+		square.position.x = px;
+		square.position.y = py;
+		square.depth = TRAP_SQUARE_DEPTH;
+		game.containers.bottomSprites.addChild(square);
+		game.map.__mazeTrapSquares.push(square);
+	};
+
+	const placeTraps = (type, count) => {
+		let placed = 0;
+		let attempts = 0;
+		const maxAttempts = count * 40;
+		while (placed < count && attempts < maxAttempts) {
+			++attempts;
+			const rx = Math.floor(nextRandom() * realCols);
+			const ry = Math.floor(nextRandom() * realRows);
+			if (!isFloor(rx, ry) || decorExclusions.has(tileKey(rx, ry))) continue;
+
+			const px = (ORIGIN_X + rx) * TILE_SIZE;
+			const py = (ORIGIN_Y + ry) * TILE_SIZE;
+			if (game.map.__mazeTraps[px + "," + py]) continue;
+
+			game.map.__mazeTraps[px + "," + py] = type;
+			decorExclusions.add(tileKey(rx, ry));
+			if (showTraps) revealTrapSquare(px, py, TRAP_COLORS[type]);
+			++placed;
+		}
+	};
+
+	placeTraps("hole", holeTrapCount);
+	placeTraps("pitfall", pitfallTrapCount);
+	placeTraps("move", moveTrapCount);
+
+	// Freezes the player until they mash the jump key free
+	const startPitfall = () => {
+		if (game.map.__mazePitfallActive) return;
+		game.map.__mazePitfallActive = true;
+		game.player.canMove = false;
+
+		const jumpKey = game.settings.keys["jump"];
+		let presses = 0;
+		const cb = (event) => {
+			if (event.which !== jumpKey || event.repeat) return;
+			++presses;
+			if (presses >= PITFALL_ESCAPE_PRESSES) {
+				document.removeEventListener("keydown", cb);
+				game.player.canMove = true;
+				game.map.__mazePitfallActive = false;
+			}
+		};
+		document.addEventListener("keydown", cb);
+	};
+
+	const triggerTrap = (type, px, py) => {
+		revealTrapSquare(px, py, TRAP_COLORS[type]);
+
+		if (type === "hole") {
+			game.player.setPosition(holeTargetX, holeTargetY);
+		} else if (type === "pitfall") {
+			startPitfall();
+		} else if (type === "move") {
+			const dir = 1 + Math.floor(nextRandom() * 4);
+			game.player.makeSlide(dir, false, false, 1);
+		}
+	};
+
+	game.map.__mazeTriggerTrap = triggerTrap;
+
+	// Install the step hook once; it reads the live trap registry each step
+	if (!game.map.__mazeTrapWrap) {
+		game.map.__mazeTrapWrap = true;
+		const origCheckTile = game.map.checkTile;
+		game.map.checkTile = function(x, y, target = this.game.player) {
+			const result = origCheckTile.call(this, x, y, target);
+			if (target && target.local && this.__mazeTraps && this.__mazeTriggerTrap) {
+				const type = this.__mazeTraps[x + "," + y];
+				if (type) this.__mazeTriggerTrap(type, x, y);
+			}
+			return result;
+		};
+	}
 
 	const floorRuns = (rx, ry) => {
 		const ring = [
