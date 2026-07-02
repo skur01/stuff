@@ -44,6 +44,22 @@ game => {
 	seed = (seed ^ (seed >>> 16)) >>> 0;
 	if (!seed) seed = 1;
 
+	// On a new daily seed, clear only this map's found items so a fresh vein is never
+	// suppressed by a stale looted position left over from a previous day's layout
+	if (+game.map.eventVars["MazeDay"] !== dayNumber) {
+		const mapPrefix = game.map.current + ",";
+		const remainingFound = [];
+		for (const key of game.map.foundItems) {
+			if (typeof key === "string" && key.startsWith(mapPrefix)) {
+				game.client.relay([87, 1, key]);
+			} else {
+				remainingFound.push(key);
+			}
+		}
+		game.map.foundItems = remainingFound;
+		game.trigger("ev[MazeDay]=" + dayNumber);
+	}
+
 	const mapTilesW = Math.floor(game.map.width / TILE_SIZE) - ORIGIN_X;
 	const mapTilesH = Math.floor(game.map.height / TILE_SIZE) - ORIGIN_Y;
 	const period = PASSAGE_SIZE + WALL_SIZE;
@@ -359,11 +375,17 @@ game => {
 		const origUseRockSmash = game.map.useRockSmash;
 		game.map.useRockSmash = function(obj) {
 			if (obj && obj.rocksmashEncounterList === "loot") {
+				console.log("[daily maze] battle vein interacted at", obj.x, obj.y);
+				const lootList = this.encounterLists && this.encounterLists["loot"];
+				console.log("[daily maze] encounterLists['loot'] =", lootList, "length =", lootList ? lootList.length : "(missing)");
+				console.log("[daily maze] canMove before =", this.game.player.canMove, "encountered before =", this.game.player.encountered);
 				this.smashedRocks[this.id + "," + obj.x + "," + obj.y] = true;
 				this.game.player.canMove = false;
 				this.game.player.encountered = 30;
 				obj.remove();
-				this.findEncounter("loot");
+				console.log("[daily maze] calling findEncounter('loot')");
+				const result = this.findEncounter("loot");
+				console.log("[daily maze] findEncounter returned", result, "canMove after =", this.game.player.canMove, "state =", this.game.state && this.game.state.constructor && this.game.state.constructor.name);
 				return;
 			}
 			return origUseRockSmash.call(this, obj);
