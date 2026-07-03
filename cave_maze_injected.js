@@ -437,8 +437,9 @@ game => {
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
 
-		if (!game.map.mapVars.MazeSpawned || dayChanged) {
-			game.map.mapVars.MazeSpawned = 1;
+		const freshEntry = game.map.spawn.id > -99;
+
+		if (freshEntry || dayChanged) {
 			const applySpawn = () => {
 				if (game.map.id !== mazeMapId) return;
 				if (!game.render) {
