@@ -437,7 +437,7 @@ game => {
 		game.map.spawns = game.map.spawns || {};
 		game.map.spawns[0] = [spawnX, spawnY, 1];
 
-		const freshEntry = game.map.spawn.id > -99;
+		const freshEntry = game.map.spawn.id > -99 || (game.player.x === 0 && game.player.y === 0);
 
 		if (freshEntry || dayChanged) {
 			const applySpawn = () => {
