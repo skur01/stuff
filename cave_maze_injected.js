@@ -643,6 +643,7 @@ game => {
 				}
 				this.__mazeTrapSquares = [];
 			}
+			this.__mazeTraps = null;
 			if (this.game.__caveDecorUids) {
 				for (const uid of this.game.__caveDecorUids) {
 					const obj = this.game.objects.get(uid);
