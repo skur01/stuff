@@ -627,6 +627,33 @@ game => {
 		};
 	}
 
+	// reset() clears most containers but not bottomSprites, so the maze's overlay, trap squares,
+	// and decor stay on screen after leaving. Tear them down on every reset (fires on map change).
+	if (!game.map.__mazeResetWrap) {
+		game.map.__mazeResetWrap = true;
+		const origReset = game.map.reset;
+		game.map.reset = function() {
+			if (this.__mazeOverlay && this.__mazeOverlay.parent) {
+				this.__mazeOverlay.parent.removeChild(this.__mazeOverlay);
+				this.__mazeOverlay = null;
+			}
+			if (this.__mazeTrapSquares) {
+				for (const square of this.__mazeTrapSquares) {
+					if (square.parent) square.parent.removeChild(square);
+				}
+				this.__mazeTrapSquares = [];
+			}
+			if (this.game.__caveDecorUids) {
+				for (const uid of this.game.__caveDecorUids) {
+					const obj = this.game.objects.get(uid);
+					if (obj) obj.remove();
+				}
+				this.game.__caveDecorUids = [];
+			}
+			return origReset.apply(this, arguments);
+		};
+	}
+
 	const floorRuns = (rx, ry) => {
 		const ring = [
 			isFloor(rx, ry - 1),
