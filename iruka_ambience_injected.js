@@ -17,11 +17,11 @@
 
 	const SHINE_X = 1200;
 	const SHINE_Y = 192;
-	const SHINE_RADIUS = 5 * TILE_SIZE;
+	const SHINE_RADIUS = 8 * TILE_SIZE;
 
 	const FOUNTAIN_X = 1208;
 	const FOUNTAIN_Y = 800;
-	const FOUNTAIN_RADIUS = 8 * TILE_SIZE;
+	const FOUNTAIN_RADIUS = 11 * TILE_SIZE;
 
 	const mapId = game.map.id;
 
