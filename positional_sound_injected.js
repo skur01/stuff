@@ -3,7 +3,7 @@
 	if (game.player.positionalHooked) return;
 	game.player.positionalHooked = true;
 
-	const SOUND_FILE = "db:scl/fi/e3m9l73lnhoucdvwqy8li/waterfountain.ogg?rlkey=k7vlp3lrdvurmt1o8wr0dno51^st=hmdiphsh^dl=0;
+	const SOUND_FILE = "https://www.dropbox.com/scl/fi/e3m9l73lnhoucdvwqy8li/waterfountain.ogg?rlkey=k7vlp3lrdvurmt1o8wr0dno51&dl=1";
 	// emitter placement and falloff radius in pixels (tile * 16)
 	const EMITTER_X = 1208;
 	const EMITTER_Y = 800;
