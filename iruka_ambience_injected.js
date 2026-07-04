@@ -1,14 +1,7 @@
 (game => {
-	if (!game.map || !game.player) {
-		console.log("[iruka] bail: map/player not ready", !!game.map, !!game.player);
-		return;
-	}
-	if (game.player.irukaAmbienceHooked) {
-		console.log("[iruka] bail: already hooked");
-		return;
-	}
+	if (!game.map || !game.player) return;
+	if (game.player.irukaAmbienceHooked) return;
 	game.player.irukaAmbienceHooked = true;
-	console.log("[iruka] installing, mapId=", game.map.id, "sfxVolume=", game.settings && game.settings.sfxVolume);
 
 	const TILE_SIZE = 16;
 
@@ -18,9 +11,9 @@
 	const FOUNTAIN_FILE = "https://www.dropbox.com/scl/fi/e3m9l73lnhoucdvwqy8li/waterfountain.ogg?rlkey=k7vlp3lrdvurmt1o8wr0dno51&dl=1";
 
 	const PLAZA_X = 1208;
-	const PLAZA_Y = 800;
-	const PLAZA_RADIUS = 31 * TILE_SIZE;
-	const PLAZA_FULL_RADIUS = (31 - 3) * TILE_SIZE;
+	const PLAZA_Y = 720;
+	const PLAZA_RADIUS = 34 * TILE_SIZE;
+	const PLAZA_FULL_RADIUS = (34 - 3) * TILE_SIZE;
 
 	const SHINE_X = 1200;
 	const SHINE_Y = 192;
@@ -43,8 +36,6 @@
 
 	const distanceTo = (x, y) => Math.hypot(game.player.x - x, game.player.y - y);
 
-	const label = file => file.split("/").pop().split("?")[0];
-
 	const emitters = [
 		{ file: PLAZA_FILE, volume: () => plazaFalloff(distanceTo(PLAZA_X, PLAZA_Y)) },
 		{ file: WAVES_FILE, volume: () => 1 - plazaFalloff(distanceTo(PLAZA_X, PLAZA_Y)) },
@@ -55,10 +46,7 @@
 	for (const emitter of emitters) {
 		emitter.audio = game.sound.play(emitter.file, false, null, 1);
 		if (emitter.audio) emitter.audio.loop = true;
-		console.log("[iruka] play", label(emitter.file), "audio?", !!emitter.audio, emitter.audio && emitter.audio.src);
 	}
-
-	let logFrames = 0;
 
 	const originalUpdate = game.player.update.bind(game.player);
 	game.player.update = function() {
@@ -66,15 +54,14 @@
 
 		const off = game.map.id !== mapId;
 		const sfx = game.settings.sfxVolume / 100;
-		const doLog = (++logFrames % 60) === 0;
 
 		for (const emitter of emitters) {
 			if (!emitter.audio) continue;
-			const vol = off ? 0 : sfx * emitter.volume();
-			emitter.audio.volume = vol;
-			if (doLog) console.log("[iruka]", label(emitter.file), "vol", vol.toFixed(3), "paused", emitter.audio.paused, "readyState", emitter.audio.readyState);
+			emitter.audio.volume = off ? 0 : sfx * emitter.volume();
+			if (!off && emitter.audio.paused) {
+				const p = emitter.audio.play();
+				if (p) p.catch(() => {});
+			}
 		}
-
-		if (doLog) console.log("[iruka] pos", game.player.x, game.player.y, "off?", off, "sfx", sfx);
 	};
 })(game)
