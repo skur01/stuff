@@ -3,7 +3,7 @@
 	if (game.player.positionalHooked) return;
 	game.player.positionalHooked = true;
 
-	const SOUND_FILE = "ambient.ogg";
+	const SOUND_FILE = "wrong.ogg";
 	// emitter placement and falloff radius in pixels (tile * 16)
 	const EMITTER_X = 1208;
 	const EMITTER_Y = 800;
