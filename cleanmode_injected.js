@@ -1,59 +1,69 @@
 (game => {
 	if (!game.map || !game.player) return;
-	if (game.map.functions.gooHooked) return;
-	game.map.functions.gooHooked = true;
 
-	const GOOP_SPRITE = "pink_goop";
-	const GOO_KEY_PREFIX = "Plaza-goop_";
-	const GOO_DONE = 2;
-	const DISSOLVE_FILE = "sprites/4543/pink_goop_dissolve";
-	const DISSOLVE_FRAMES = 5;
-	const DISSOLVE_FPS = 100;
-	const SPRITE_SIZE = 24;
+	if (game.player.cleanmodeHooked) return;
+	game.player.cleanmodeHooked = true;
 
-	const findGoop = obj => {
-		for (const other of game.objects.list) {
-			if (!other || other === obj) continue;
-			const name = other.textureName || "";
-			if (name.includes(GOOP_SPRITE) && !name.includes("dissolve") && other.x === obj.x && other.y === obj.y) return other;
+	const CLEAN_MON = "00zw418h";
+	const WATERSPRAY_1 = "https://www.dropbox.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
+	const WATERSPRAY_2 = "https://www.dropbox.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
+
+	const mapId = game.map.id;
+
+	let engaged = false;
+	let engagedMap = null;
+	let prevNoJumping = false;
+	let spray1 = null;
+	let spray2 = null;
+
+	const hasMonOut = () => {
+		const party = game.player.party;
+		if (!party) return false;
+		for (const mon of party.mons) {
+			if (mon && mon.outAsAlly && mon.data && mon.data.uid === CLEAN_MON) return true;
 		}
-		return null;
+		return false;
 	};
 
-	// %tile.x% bakes as pixels, but match the key the step trigger already set instead of assuming
-	const getGooKey = obj => {
-		const pixelKey = GOO_KEY_PREFIX + obj.x + "_" + obj.y;
-		const tileKey = GOO_KEY_PREFIX + (obj.x / 16) + "_" + (obj.y / 16);
-		if (typeof game.map.mapVars[pixelKey] !== "undefined") return pixelKey;
-		if (typeof game.map.mapVars[tileKey] !== "undefined") return tileKey;
-		return null;
-	};
-
-	const prevOnStep = game.map.functions.onStep;
-	game.map.functions.onStep = obj => {
-		if (prevOnStep) prevOnStep(obj);
-
-		if (!obj.local || !obj.player) return;
-		if (game.map.eventVars["cleanmode"] !== 1) return;
-
-		const goop = findGoop(obj);
-		if (!goop) return;
-
-		const gooKey = getGooKey(obj);
-		if (gooKey) game.map.mapVars[gooKey] = GOO_DONE;
-
-		goop.setAnimation({
-			file: DISSOLVE_FILE,
-			x: 0,
-			y: 0,
-			width: SPRITE_SIZE,
-			height: SPRITE_SIZE,
-			fps: DISSOLVE_FPS,
-			frames: DISSOLVE_FRAMES,
-			loop: {
-				times: 1,
-				cb: () => goop.remove()
-			}
+	const startSpray = () => {
+		spray1 = game.sound.play(WATERSPRAY_1, false, () => {
+			spray1 = null;
+			if (!engaged) return;
+			spray2 = game.sound.play(WATERSPRAY_2, false);
+			if (spray2) spray2.loop = true;
 		});
+	};
+
+	const stopSpray = () => {
+		if (spray1) {
+			spray1.stop();
+			spray1 = null;
+		}
+		if (spray2) {
+			spray2.stop();
+			spray2 = null;
+		}
+	};
+
+	const originalLocalKeys = game.player.localKeys.bind(game.player);
+	game.player.localKeys = function(moving) {
+		const active = game.map.id === mapId && game.input.keyHeld("jump") && hasMonOut();
+
+		if (active && !engaged) {
+			engaged = true;
+			engagedMap = game.map;
+			prevNoJumping = game.map.noJumping;
+			game.map.noJumping = true;
+			game.map.eventVars["cleanmode"] = 1;
+			startSpray();
+		} else if (!active && engaged) {
+			engaged = false;
+			engagedMap.noJumping = prevNoJumping;
+			engagedMap.eventVars["cleanmode"] = 0;
+			engagedMap = null;
+			stopSpray();
+		}
+
+		originalLocalKeys(moving);
 	};
 })(game)
