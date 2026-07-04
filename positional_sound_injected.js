@@ -15,8 +15,6 @@
 	if (!audio) return;
 	audio.loop = true;
 
-	const baseVolume = audio.targetVolume || audio.volume || 1;
-
 	const originalUpdate = game.player.update.bind(game.player);
 	game.player.update = function() {
 		originalUpdate();
@@ -30,6 +28,6 @@
 		const dy = game.player.y - EMITTER_Y;
 		const dist = Math.hypot(dx, dy);
 		const falloff = Math.max(0, 1 - dist / RADIUS);
-		audio.volume = baseVolume * falloff;
+		audio.volume = (game.settings.sfxVolume / 100) * falloff;
 	};
 })(game)
