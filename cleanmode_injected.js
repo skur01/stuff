@@ -1,65 +1,69 @@
 (game => {
-	console.log("[cleanmode] IIFE entered - map?", !!(game && game.map), "player?", !!(game && game.player), "hooked?", !!(game && game.player && game.player.cleanmodeHooked));
+	if (!game.map || !game.player) return;
 
-	if (!game.map || !game.player) {
-		console.log("[cleanmode] bailed: map or player not ready");
-		return;
-	}
-
-	const mapId = game.map.id;
-
-	if (game.player.cleanmodeHooked) {
-		console.log("[cleanmode] bailed: already hooked");
-		return;
-	}
+	if (game.player.cleanmodeHooked) return;
 	game.player.cleanmodeHooked = true;
 
-	console.log("[cleanmode] hook installed on map", mapId);
-
 	const CLEAN_MON = "00zw418h";
+	const WATERSPRAY_1 = "https://www.dropbox.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
+	const WATERSPRAY_2 = "https://www.dropbox.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
+
+	const mapId = game.map.id;
 
 	let engaged = false;
 	let engagedMap = null;
 	let prevNoJumping = false;
+	let spray1 = null;
+	let spray2 = null;
 
 	const hasMonOut = () => {
 		const party = game.player.party;
-		if (!party) {
-			console.log("[cleanmode] no party");
-			return false;
-		}
+		if (!party) return false;
 		for (const mon of party.mons) {
-			if (!mon) continue;
-			console.log("[cleanmode] mon uid", mon.data && mon.data.uid, "outAsAlly", mon.outAsAlly);
-			if (mon.outAsAlly && mon.data && mon.data.uid === CLEAN_MON) return true;
+			if (mon && mon.outAsAlly && mon.data && mon.data.uid === CLEAN_MON) return true;
 		}
 		return false;
 	};
 
-	const originalUpdate = game.player.update.bind(game.player);
-	game.player.update = function() {
-		const mapMatch = game.map.id === mapId;
-		const jumpHeld = game.input.keyHeld("jump");
+	const startSpray = () => {
+		spray1 = game.sound.play(WATERSPRAY_1, false, () => {
+			spray1 = null;
+			if (!engaged) return;
+			spray2 = game.sound.play(WATERSPRAY_2, false);
+			if (spray2) spray2.loop = true;
+		});
+	};
 
-		if (jumpHeld) console.log("[cleanmode] jumpHeld", jumpHeld, "mapMatch", mapMatch, "id", game.map.id, "expected", mapId);
+	const stopSpray = () => {
+		if (spray1) {
+			spray1.stop();
+			spray1 = null;
+		}
+		if (spray2) {
+			spray2.stop();
+			spray2 = null;
+		}
+	};
 
-		const active = mapMatch && jumpHeld && hasMonOut();
+	const originalLocalKeys = game.player.localKeys.bind(game.player);
+	game.player.localKeys = function(moving) {
+		const active = game.map.id === mapId && game.input.keyHeld("jump") && hasMonOut();
 
 		if (active && !engaged) {
-			console.log("[cleanmode] ENGAGE");
 			engaged = true;
 			engagedMap = game.map;
 			prevNoJumping = game.map.noJumping;
 			game.map.noJumping = true;
 			game.map.eventVars["cleanmode"] = 1;
+			startSpray();
 		} else if (!active && engaged) {
-			console.log("[cleanmode] DISENGAGE");
 			engaged = false;
 			engagedMap.noJumping = prevNoJumping;
 			engagedMap.eventVars["cleanmode"] = 0;
 			engagedMap = null;
+			stopSpray();
 		}
 
-		originalUpdate();
+		originalLocalKeys(moving);
 	};
 })(game)
