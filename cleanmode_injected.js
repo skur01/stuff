@@ -4,6 +4,8 @@
 	game.map.functions.gooHooked = true;
 
 	const GOOP_SPRITE = "pink_goop";
+	const GOO_KEY_PREFIX = "Plaza-goop_";
+	const GOO_DONE = 2;
 	const DISSOLVE_FILE = "sprites/4543/pink_goop_dissolve";
 	const DISSOLVE_FRAMES = 5;
 	const DISSOLVE_FPS = 100;
@@ -18,6 +20,15 @@
 		return null;
 	};
 
+	// %tile.x% bakes as pixels, but match the key the step trigger already set instead of assuming
+	const getGooKey = obj => {
+		const pixelKey = GOO_KEY_PREFIX + obj.x + "_" + obj.y;
+		const tileKey = GOO_KEY_PREFIX + (obj.x / 16) + "_" + (obj.y / 16);
+		if (typeof game.map.mapVars[pixelKey] !== "undefined") return pixelKey;
+		if (typeof game.map.mapVars[tileKey] !== "undefined") return tileKey;
+		return null;
+	};
+
 	const prevOnStep = game.map.functions.onStep;
 	game.map.functions.onStep = obj => {
 		if (prevOnStep) prevOnStep(obj);
@@ -27,6 +38,9 @@
 
 		const goop = findGoop(obj);
 		if (!goop) return;
+
+		const gooKey = getGooKey(obj);
+		if (gooKey) game.map.mapVars[gooKey] = GOO_DONE;
 
 		goop.setAnimation({
 			file: DISSOLVE_FILE,
