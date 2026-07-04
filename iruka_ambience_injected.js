@@ -6,14 +6,14 @@
 	const TILE_SIZE = 16;
 
 	const PLAZA_FILE = "https://dl.dropboxusercontent.com/scl/fi/tf38cpmw6u62hwl8y13p9/irukaplazaambience.ogg?rlkey=4uq4vomj08a5jm8gvrmk3mxw4&dl=1";
-	const WAVES_FILE = "https://www.dropbox.com/scl/fi/t2tm4ruu5johijo3gb4ra/irukawavesambience.ogg?rlkey=4uphas2eogli15nj8w1nh44aj&dl=1";
+	const WAVES_FILE = "https://dl.dropboxusercontent.com/scl/fi/t2tm4ruu5johijo3gb4ra/irukawavesambience.ogg?rlkey=4uphas2eogli15nj8w1nh44aj&dl=1";
 	const SHINE_FILE = "https://www.dropbox.com/scl/fi/gt07vmwpnsbfng798abma/shinespritesfx.ogg?rlkey=0vnuoschnl831u21eavu9bgno&dl=1";
 	const FOUNTAIN_FILE = "https://www.dropbox.com/scl/fi/e3m9l73lnhoucdvwqy8li/waterfountain.ogg?rlkey=k7vlp3lrdvurmt1o8wr0dno51&dl=1";
 
 	const PLAZA_X = 1208;
 	const PLAZA_Y = 720;
 	const PLAZA_RADIUS = 34 * TILE_SIZE;
-	const PLAZA_FULL_RADIUS = (34 - 3) * TILE_SIZE;
+	const PLAZA_FULL_RADIUS = (34 - 10) * TILE_SIZE;
 
 	const SHINE_X = 1200;
 	const SHINE_Y = 192;
