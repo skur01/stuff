@@ -51,11 +51,11 @@
 			direction: game.player.direction,
 			map: game.map.current,
 			addToMap: true,
-			solid: false
+			solid: false,
+			player: true
 		});
 		state.flotomTileX = null;
 		state.flotomTileY = null;
-		console.log("[clean] spawned flotom uid", state.flotom && state.flotom.uid, "tex", state.flotom && state.flotom.textureName);
 	};
 
 	const startCleaning = () => {
@@ -119,6 +119,12 @@
 			originalUpdate();
 			if (!state.cleaning) return;
 
+			// recalling the mon to its ball turns cleaning off
+			if (game.player.allyId.indexOf(CLEAN_MON) < 0) {
+				stopCleaning();
+				return;
+			}
+
 			// map reloads null the uid of string-uid objects, respawn right away
 			if (!state.flotom || !state.flotom.uid) spawnFlotom();
 
@@ -139,9 +145,6 @@
 			if (tileX !== state.flotomTileX || tileY !== state.flotomTileY) {
 				state.flotomTileX = tileX;
 				state.flotomTileY = tileY;
-
-				const hasExecute = !!(game.map.execute[tileY] && game.map.execute[tileY][tileX]);
-				console.log("[clean] flotom tile", tileX, tileY, "uid", state.flotom.uid, "execute?", hasExecute);
 
 				game.map.checkTile(tileX + state.flotom.offset.x - 8, tileY + state.flotom.offset.y - 16, state.flotom);
 			}
