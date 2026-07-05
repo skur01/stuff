@@ -213,6 +213,7 @@
 		game.player.update = function() {
 			originalUpdate();
 			if (!state.mode) return;
+			if (game.map.loading || game.map.resetting) return;
 
 			// recalling the mon turns the mode off
 			if (game.player.allyId.indexOf(CLEAN_MON) < 0) {
