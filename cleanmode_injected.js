@@ -145,6 +145,7 @@
 			if (tileX !== state.flotomTileX || tileY !== state.flotomTileY) {
 				state.flotomTileX = tileX;
 				state.flotomTileY = tileY;
+				state.flotom.ontiled = false;
 
 				game.map.checkTile(tileX + state.flotom.offset.x - 8, tileY + state.flotom.offset.y - 16, state.flotom);
 			}
