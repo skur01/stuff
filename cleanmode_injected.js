@@ -90,6 +90,8 @@
 		]);
 	};
 
+	if (state.cleaning && !game.objects.get(FLOTOM_UID)) spawnFlotom();
+
 	if (!game.player.cleanKeysHooked) {
 		game.player.cleanKeysHooked = true;
 
@@ -121,6 +123,7 @@
 			const front = tileAhead(game.player.x, game.player.y, game.player.direction);
 			state.flotom.x = front[0];
 			state.flotom.y = front[1];
+			state.flotom.setSpritePosition();
 
 			if (state.flotomDir !== game.player.direction) {
 				state.flotomDir = game.player.direction;
