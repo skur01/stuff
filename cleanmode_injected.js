@@ -164,7 +164,7 @@
 		state.floatStartTime = Date.now();
 		state.prevNoJumping = game.map.noJumping;
 		game.map.noJumping = true;
-		game.map.globalVars["cleanmode"] = 1;
+		game.trigger("var[cleanmode]=1");
 		game.player.floating = 1;
 		game.player.floatingHeight = FLOAT_HEIGHT;
 		game.client.relay([39, FLOAT_HEIGHT]);
@@ -182,7 +182,7 @@
 		state.floatEngaged = false;
 		state.awaitingLand = true;
 		game.map.noJumping = state.prevNoJumping;
-		game.map.globalVars["cleanmode"] = 0;
+		game.trigger("var[cleanmode]=0");
 		game.player.floating = 0;
 		game.player.floatingHeight = 0;
 		game.client.relay([39, 0]);
@@ -202,7 +202,7 @@
 	const engageTurbo = () => {
 		state.turboEngaged = true;
 		state.turboDirection = game.player.direction;
-		game.map.globalVars["cleanmode"] = 1;
+		game.trigger("var[cleanmode]=1");
 
 		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 
@@ -211,7 +211,7 @@
 
 	const disengageTurbo = () => {
 		state.turboEngaged = false;
-		game.map.globalVars["cleanmode"] = 0;
+		game.trigger("var[cleanmode]=0");
 
 		if (state.flotom) state.flotom.destroySplash();
 
@@ -225,7 +225,7 @@
 		spawnFlotom();
 
 		if (mode === "cleaning") {
-			game.map.globalVars["cleanmode"] = 1;
+			game.trigger("var[cleanmode]=1");
 			startSpray();
 		}
 	};
@@ -240,7 +240,7 @@
 		state.descending = false;
 		state.awaitingLand = false;
 		state.mode = null;
-		game.map.globalVars["cleanmode"] = 0;
+		game.trigger("var[cleanmode]=0");
 		stopSpray();
 		if (state.flotom) {
 			state.flotom.destroySplash();
@@ -508,9 +508,6 @@
 				state.flotomTileX = tileX;
 				state.flotomTileY = tileY;
 				state.flotom.ontiled = false;
-
-				const hasExecute = !!(game.map.execute[tileY] && game.map.execute[tileY][tileX]);
-				console.log("[clean] fire", state.mode, tileX, tileY, "uid", state.flotom.uid, "execute?", hasExecute, "cleanmode", game.map.globalVars["cleanmode"], "updating?", game.map.updating);
 
 				game.map.checkTile(tileX + state.flotom.offset.x - 8, tileY + state.flotom.offset.y - 16, state.flotom);
 			}
