@@ -14,6 +14,7 @@
 		cleanAlly: null,
 		spray1: null,
 		spray2: null,
+		sprayOn: false,
 		floatEngaged: false,
 		prevNoJumping: false,
 		flotomTileX: null,
@@ -22,15 +23,18 @@
 	});
 
 	const startSpray = () => {
+		if (state.sprayOn) return;
+		state.sprayOn = true;
 		state.spray1 = game.sound.play(WATERSPRAY_1, false, () => {
 			state.spray1 = null;
-			if (state.mode !== "cleaning") return;
+			if (!state.sprayOn) return;
 			state.spray2 = game.sound.play(WATERSPRAY_2, false);
 			if (state.spray2) state.spray2.loop = true;
 		});
 	};
 
 	const stopSpray = () => {
+		state.sprayOn = false;
 		if (state.spray1) { state.spray1.stop(); state.spray1 = null; }
 		if (state.spray2) { state.spray2.stop(); state.spray2 = null; }
 	};
@@ -50,9 +54,8 @@
 		return [x + TILE_SIZE, y];
 	};
 
-	// behind while actively floating, in front otherwise so it stays interactable
 	const glueTarget = () => {
-		if (state.mode === "floating" && state.floatEngaged) return tileBehind(game.player.x, game.player.y, game.player.direction);
+		if (state.mode === "floating") return tileBehind(game.player.x, game.player.y, game.player.direction);
 		return tileAhead(game.player.x, game.player.y, game.player.direction);
 	};
 
@@ -83,7 +86,12 @@
 		state.flotomTileY = null;
 
 		// splash array layout matches map splash tiles: [.., .., sprite, frames, fps, loop]
-		state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+		if (state.mode === "cleaning" || state.floatEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+
+		if (state.floatEngaged) {
+			state.flotom.floating = 1;
+			state.flotom.floatingHeight = FLOAT_HEIGHT;
+		}
 	};
 
 	const engageFloat = () => {
@@ -94,6 +102,14 @@
 		game.player.floating = 1;
 		game.player.floatingHeight = FLOAT_HEIGHT;
 		game.client.relay([39, FLOAT_HEIGHT]);
+
+		if (state.flotom) {
+			state.flotom.floating = 1;
+			state.flotom.floatingHeight = FLOAT_HEIGHT;
+			state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+		}
+
+		startSpray();
 	};
 
 	const disengageFloat = () => {
@@ -103,6 +119,14 @@
 		game.player.floating = 0;
 		game.player.floatingHeight = 0;
 		game.client.relay([39, 0]);
+
+		if (state.flotom) {
+			state.flotom.floating = 0;
+			state.flotom.floatingHeight = 0;
+			state.flotom.destroySplash();
+		}
+
+		stopSpray();
 	};
 
 	const startMode = mode => {
@@ -166,9 +190,13 @@
 
 			if (game.input.keyPressed("action") && game.textbox.active < 0) {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+				const behind = tileBehind(game.player.x, game.player.y, game.player.direction);
 				const facing = state.mode ? state.flotom : getCleanAlly();
 
-				if (facing && facing.x === front[0] && facing.y === front[1]) {
+				const atFront = facing && facing.x === front[0] && facing.y === front[1];
+				const atBehind = state.mode === "floating" && facing && facing.x === behind[0] && facing.y === behind[1];
+
+				if (atFront || atBehind) {
 					openMenu();
 					return;
 				}
@@ -205,7 +233,7 @@
 				state.flotom.setDirection(game.player.direction);
 			}
 
-			// only fire ontiles while a mode has cleanmode active
+			// only fire ontiles while cleanmode is active
 			if (state.mode === "floating" && !state.floatEngaged) return;
 
 			const tileX = Math.round(state.flotom.x / TILE_SIZE) * TILE_SIZE;
