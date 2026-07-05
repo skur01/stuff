@@ -235,6 +235,17 @@
 			state.flotom.y = spot[1];
 			state.flotom.setSpritePosition();
 
+			// direct coordinate writes skip the engine's depth recalculation, so mirror it here
+			state.flotom.sprite.depth = state.flotom.y - state.flotom.z + state.flotom.offset.y + state.flotom.offset.custom.y - state.flotom.depth;
+			state.flotom.sprite.realDepth = state.flotom.sprite.depth | 0;
+
+			if (state.flotom.splash) {
+				state.flotom.splash.sprite.depth = state.flotom.sprite.depth + 1;
+				state.flotom.splash.sprite.realDepth = state.flotom.sprite.realDepth + 1;
+			}
+
+			if (state.flotom.sprite.parent) game.objects.needsSorting[state.flotom.sprite.parent.name] = true;
+
 			if (state.flotomDir !== game.player.direction) {
 				state.flotomDir = game.player.direction;
 				state.flotom.setDirection(game.player.direction);
