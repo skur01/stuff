@@ -16,6 +16,7 @@
 		spray2: null,
 		sprayOn: false,
 		floatEngaged: false,
+		floatDeadline: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -92,6 +93,13 @@
 		}
 	};
 
+	// getVar reads eventVars, then mapVars, then globalVars, so zero it wherever it lives
+	const clearFloatingModeVar = () => {
+		if (typeof game.map.eventVars["floatingmode"] !== "undefined") game.map.eventVars["floatingmode"] = 0;
+		if (typeof game.map.mapVars["floatingmode"] !== "undefined") game.map.mapVars["floatingmode"] = 0;
+		game.map.globalVars["floatingmode"] = 0;
+	};
+
 	const getCleanAlly = () => {
 		let ally = game.player.ally;
 		while (ally) {
@@ -131,7 +139,7 @@
 		state.floatEngaged = true;
 		state.prevNoJumping = game.map.noJumping;
 		game.map.noJumping = true;
-		game.map.eventVars["cleanmode"] = 1;
+		game.map.globalVars["cleanmode"] = 1;
 		game.player.floating = 1;
 		game.player.floatingHeight = FLOAT_HEIGHT;
 		game.client.relay([39, FLOAT_HEIGHT]);
@@ -148,7 +156,7 @@
 	const disengageFloat = () => {
 		state.floatEngaged = false;
 		game.map.noJumping = state.prevNoJumping;
-		game.map.eventVars["cleanmode"] = 0;
+		game.map.globalVars["cleanmode"] = 0;
 		game.player.floating = 0;
 		game.player.floatingHeight = 0;
 		game.client.relay([39, 0]);
@@ -172,7 +180,7 @@
 		spawnFlotom();
 
 		if (mode === "cleaning") {
-			game.map.eventVars["cleanmode"] = 1;
+			game.map.globalVars["cleanmode"] = 1;
 			startSpray();
 		}
 	};
@@ -180,7 +188,7 @@
 	const stopMode = () => {
 		if (state.floatEngaged) disengageFloat();
 		state.mode = null;
-		game.map.eventVars["cleanmode"] = 0;
+		game.map.globalVars["cleanmode"] = 0;
 		stopSpray();
 		if (state.flotom) {
 			state.flotom.destroySplash();
@@ -194,11 +202,10 @@
 	};
 
 	const openMenu = () => {
-		if (state.mode) {
-			const label = state.mode === "cleaning" ? "Stop Cleaning" : "Stop Floating";
+		if (state.mode === "cleaning") {
 			game.textbox.say("What would you like to do?");
 			game.textbox.answers([
-				[label, () => stopMode()],
+				["Stop Cleaning", () => stopMode()],
 				["Nevermind", () => {}]
 			]);
 			return;
@@ -207,7 +214,6 @@
 		game.textbox.say("What would you like to do?");
 		game.textbox.answers([
 			["Cleaning Mode", () => startMode("cleaning")],
-			["Floating Mode", () => startMode("floating")],
 			["Nevermind", () => {}]
 		]);
 	};
@@ -224,15 +230,11 @@
 				else if (!held && state.floatEngaged) disengageFloat();
 			}
 
-			if (game.input.keyPressed("action") && game.textbox.active < 0) {
+			if (game.input.keyPressed("action") && game.textbox.active < 0 && state.mode !== "floating") {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
-				const behind = tileBehind(game.player.x, game.player.y, game.player.direction);
 				const facing = state.mode ? state.flotom : getCleanAlly();
 
-				const atFront = facing && facing.x === front[0] && facing.y === front[1];
-				const atBehind = state.mode === "floating" && facing && facing.x === behind[0] && facing.y === behind[1];
-
-				if (atFront || atBehind) {
+				if (facing && facing.x === front[0] && facing.y === front[1]) {
 					openMenu();
 					return;
 				}
@@ -248,8 +250,24 @@
 		const originalUpdate = game.player.update.bind(game.player);
 		game.player.update = function() {
 			originalUpdate();
-			if (!state.mode) return;
 			if (game.map.loading || game.map.resetting) return;
+
+			// mirror a fully risen float into var[floating_on]
+			const fullyFloating = game.player.floating === 2 ? 1 : 0;
+			if (game.map.globalVars["floating_on"] !== fullyFloating) game.map.globalVars["floating_on"] = fullyFloating;
+
+			// var[floatingmode]: 1 = on until zeroed, above 1 = seconds until it zeroes itself
+			const floatingVar = +game.map.getVar("floatingmode", 0) || 0;
+			if (!state.mode && floatingVar >= 1) {
+				startMode("floating");
+				state.floatDeadline = floatingVar > 1 ? Date.now() + floatingVar * 1000 : 0;
+			} else if (state.mode === "floating") {
+				const expired = state.floatDeadline && Date.now() >= state.floatDeadline;
+				if (expired) clearFloatingModeVar();
+				if (expired || !floatingVar) stopMode();
+			}
+
+			if (!state.mode) return;
 
 			// recalling the mon turns the mode off
 			if (game.player.allyId.indexOf(CLEAN_MON) < 0) {
