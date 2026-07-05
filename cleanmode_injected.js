@@ -26,6 +26,7 @@
 		descentHover: 0,
 		awaitingLand: false,
 		cooldownUntil: 0,
+		jumpBlocked: false,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -198,6 +199,10 @@
 
 	const stopMode = () => {
 		if (state.floatEngaged) disengageFloat();
+		if (state.jumpBlocked) {
+			state.jumpBlocked = false;
+			game.map.noJumping = state.prevNoJumping;
+		}
 		state.descending = false;
 		state.awaitingLand = false;
 		state.mode = null;
@@ -239,7 +244,18 @@
 			// float while the jump key is held
 			if (state.mode === "floating") {
 				const held = game.input.keyHeld("jump");
-				const canEngage = !state.floatEngaged && !state.descending && Date.now() >= state.cooldownUntil;
+				const coolingDown = state.descending || Date.now() < state.cooldownUntil;
+				const canEngage = !state.floatEngaged && !coolingDown;
+
+				// no real jumps while drifting down or cooling down
+				if (coolingDown && !state.floatEngaged && !state.jumpBlocked) {
+					state.jumpBlocked = true;
+					game.map.noJumping = true;
+				} else if (!coolingDown && state.jumpBlocked && !state.floatEngaged) {
+					state.jumpBlocked = false;
+					game.map.noJumping = state.prevNoJumping;
+				}
+
 				if (held && canEngage) engageFloat();
 				else if (!held && state.floatEngaged) disengageFloat();
 			}
