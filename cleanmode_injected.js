@@ -20,6 +20,7 @@
 		sprayOn: false,
 		floatEngaged: false,
 		floatDeadline: 0,
+		floatVarSeen: 0,
 		floatStartTime: 0,
 		descending: false,
 		descentStart: 0,
@@ -107,7 +108,7 @@
 	const clearFloatingModeVar = () => {
 		if (typeof game.map.eventVars["floatingmode"] !== "undefined") game.map.eventVars["floatingmode"] = 0;
 		if (typeof game.map.mapVars["floatingmode"] !== "undefined") game.map.mapVars["floatingmode"] = 0;
-		game.map.globalVars["floatingmode"] = 0;
+		game.trigger("var[floatingmode]=0");
 	};
 
 	const getCleanAlly = () => {
@@ -290,8 +291,15 @@
 			const floatingVar = +game.map.getVar("floatingmode", 0) || 0;
 			if (!state.mode && floatingVar >= 1) {
 				startMode("floating");
+				state.floatVarSeen = floatingVar;
 				state.floatDeadline = floatingVar > 1 ? Date.now() + floatingVar * 1000 : 0;
 			} else if (state.mode === "floating") {
+				// re-arm the timer if the var value changed while the mode was already running
+				if (floatingVar && floatingVar !== state.floatVarSeen) {
+					state.floatVarSeen = floatingVar;
+					state.floatDeadline = floatingVar > 1 ? Date.now() + floatingVar * 1000 : 0;
+				}
+
 				const expired = state.floatDeadline && Date.now() >= state.floatDeadline;
 				if (expired) clearFloatingModeVar();
 				if (expired || !floatingVar) stopMode();
