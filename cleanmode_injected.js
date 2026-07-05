@@ -509,6 +509,9 @@
 				state.flotomTileY = tileY;
 				state.flotom.ontiled = false;
 
+				const hasExecute = !!(game.map.execute[tileY] && game.map.execute[tileY][tileX]);
+				console.log("[clean] fire", state.mode, tileX, tileY, "uid", state.flotom.uid, "execute?", hasExecute, "cleanmode", game.map.globalVars["cleanmode"], "updating?", game.map.updating);
+
 				game.map.checkTile(tileX + state.flotom.offset.x - 8, tileY + state.flotom.offset.y - 16, state.flotom);
 			}
 		};
