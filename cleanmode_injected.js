@@ -224,6 +224,12 @@
 			// map reloads null the uid of string-uid objects, respawn right away
 			if (!state.flotom || !state.flotom.uid) spawnFlotom();
 
+			// refresh strips sprites without nulling the uid, re-add and rebuild the splash
+			if (!state.flotom.nearby) {
+				state.flotom.addToMap();
+				if (state.mode === "cleaning" || state.floatEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+			}
+
 			const spot = glueTarget();
 			state.flotom.x = spot[0];
 			state.flotom.y = spot[1];
