@@ -254,7 +254,7 @@
 
 			// mirror a fully risen float into var[floating_on]
 			const fullyFloating = game.player.floating === 2 ? 1 : 0;
-			if (game.map.globalVars["floating_on"] !== fullyFloating) game.map.globalVars["floating_on"] = fullyFloating;
+			if (game.map.globalVars["floating_on"] !== fullyFloating) game.trigger("var[floating_on]=" + fullyFloating);
 
 			// var[floatingmode]: 1 = on until zeroed, above 1 = seconds until it zeroes itself
 			const floatingVar = +game.map.getVar("floatingmode", 0) || 0;
