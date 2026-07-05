@@ -7,6 +7,9 @@
 	const WATERSPRAY_2 = "https://dl.dropboxusercontent.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
 	const TILE_SIZE = 16;
 	const FLOAT_HEIGHT = 16;
+	const HOLD_DURATION = 4000;
+	const DESCENT_DURATION = 1000;
+	const FLOAT_COOLDOWN = 1000;
 
 	const state = game.player.cleanState || (game.player.cleanState = {
 		mode: null,
@@ -17,6 +20,12 @@
 		sprayOn: false,
 		floatEngaged: false,
 		floatDeadline: 0,
+		floatStartTime: 0,
+		descending: false,
+		descentStart: 0,
+		descentHover: 0,
+		awaitingLand: false,
+		cooldownUntil: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -137,6 +146,7 @@
 
 	const engageFloat = () => {
 		state.floatEngaged = true;
+		state.floatStartTime = Date.now();
 		state.prevNoJumping = game.map.noJumping;
 		game.map.noJumping = true;
 		game.map.globalVars["cleanmode"] = 1;
@@ -155,6 +165,7 @@
 
 	const disengageFloat = () => {
 		state.floatEngaged = false;
+		state.awaitingLand = true;
 		game.map.noJumping = state.prevNoJumping;
 		game.map.globalVars["cleanmode"] = 0;
 		game.player.floating = 0;
@@ -187,6 +198,8 @@
 
 	const stopMode = () => {
 		if (state.floatEngaged) disengageFloat();
+		state.descending = false;
+		state.awaitingLand = false;
 		state.mode = null;
 		game.map.globalVars["cleanmode"] = 0;
 		stopSpray();
@@ -226,7 +239,8 @@
 			// float while the jump key is held
 			if (state.mode === "floating") {
 				const held = game.input.keyHeld("jump");
-				if (held && !state.floatEngaged) engageFloat();
+				const canEngage = !state.floatEngaged && !state.descending && Date.now() >= state.cooldownUntil;
+				if (held && canEngage) engageFloat();
 				else if (!held && state.floatEngaged) disengageFloat();
 			}
 
@@ -277,6 +291,34 @@
 
 			// map reloads null the uid of string-uid objects, respawn right away
 			if (!state.flotom || !state.flotom.uid) spawnFlotom();
+
+			if (state.mode === "floating") {
+				// the nozzle only holds for so long, then a gentle drift down
+				if (state.floatEngaged && Date.now() - state.floatStartTime >= HOLD_DURATION) {
+					state.descentStart = Date.now();
+					state.descentHover = game.player.hover;
+					disengageFloat();
+					state.descending = true;
+					state.awaitingLand = false;
+				}
+
+				if (state.descending) {
+					const progress = (Date.now() - state.descentStart) / DESCENT_DURATION;
+					if (progress >= 1) {
+						game.player.hover = 0;
+						state.descending = false;
+						state.cooldownUntil = Date.now() + FLOAT_COOLDOWN;
+					} else {
+						// engine decay runs first each frame, this overwrite wins for rendering
+						game.player.hover = state.descentHover * (1 - progress);
+					}
+					game.player.setSpritePosition();
+					if (state.flotom) state.flotom.hover = game.player.hover;
+				} else if (state.awaitingLand && !game.player.hover) {
+					state.awaitingLand = false;
+					state.cooldownUntil = Date.now() + FLOAT_COOLDOWN;
+				}
+			}
 
 			// refresh strips sprites without nulling the uid, re-add and rebuild the splash
 			if (!state.flotom.nearby) {
