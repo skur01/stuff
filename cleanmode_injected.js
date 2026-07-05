@@ -59,6 +59,39 @@
 		return tileAhead(game.player.x, game.player.y, game.player.direction);
 	};
 
+	// samples the baked foreground canvas for any visible pixels in the given map-space rect
+	const hasForegroundPixels = (x, y, w, h) => {
+		if (!game.map.tilemaps.foreground.length) return false;
+
+		const pixels = game.map.ctx.foreground.getImageData(x, y, w, h).data;
+		for (let i = 3; i < pixels.length; i += 4) {
+			if (pixels[i]) return true;
+		}
+		return false;
+	};
+
+	// true when the raised sprite overlaps foreground above it but none sits on its own row (perspective stays intact)
+	const isOverlappingForegroundAbove = obj => {
+		const tileX = Math.round((obj.x - game.map.offset.x) / TILE_SIZE) * TILE_SIZE;
+		const tileY = Math.round((obj.y - game.map.offset.y) / TILE_SIZE) * TILE_SIZE;
+		const cacheKey = tileX + "," + tileY;
+
+		if (obj.foreCacheKey !== cacheKey) {
+			obj.foreCacheKey = cacheKey;
+			obj.foreCacheValue = hasForegroundPixels(tileX, tileY - 2 * TILE_SIZE, TILE_SIZE, 2 * TILE_SIZE) &&
+				!hasForegroundPixels(tileX, tileY, TILE_SIZE, TILE_SIZE);
+		}
+		return obj.foreCacheValue;
+	};
+
+	const setForeLevel = (obj, fore) => {
+		const target = fore ? game.containers.topSprites : obj.parent;
+		if (obj.sprite.parent && obj.sprite.parent !== target) {
+			target.addChild(obj.sprite);
+			game.objects.needsSorting[target.name] = true;
+		}
+	};
+
 	const getCleanAlly = () => {
 		let ally = game.player.ally;
 		while (ally) {
@@ -120,10 +153,13 @@
 		game.player.floatingHeight = 0;
 		game.client.relay([39, 0]);
 
+		setForeLevel(game.player, false);
+
 		if (state.flotom) {
 			state.flotom.floating = 0;
 			state.flotom.floatingHeight = 0;
 			state.flotom.destroySplash();
+			setForeLevel(state.flotom, false);
 		}
 
 		stopSpray();
@@ -245,6 +281,11 @@
 			}
 
 			if (state.flotom.sprite.parent) game.objects.needsSorting[state.flotom.sprite.parent.name] = true;
+
+			if (state.mode === "floating") {
+				setForeLevel(game.player, state.floatEngaged && isOverlappingForegroundAbove(game.player));
+				setForeLevel(state.flotom, state.floatEngaged && isOverlappingForegroundAbove(state.flotom));
+			}
 
 			if (state.flotomDir !== game.player.direction) {
 				state.flotomDir = game.player.direction;
