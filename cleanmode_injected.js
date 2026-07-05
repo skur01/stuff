@@ -6,7 +6,6 @@
 	const WATERSPRAY_1 = "https://dl.dropboxusercontent.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
 	const WATERSPRAY_2 = "https://dl.dropboxusercontent.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
 	const TILE_SIZE = 16;
-	const FLOTOM_SPEED = 1000;
 
 	const state = game.player.cleanState || (game.player.cleanState = { cleaning: false, flotom: null, cleanAlly: null, spray1: null, spray2: null });
 
@@ -54,10 +53,9 @@
 			addToMap: true,
 			solid: false
 		});
-		if (state.flotom) {
-			state.flotom.speed = FLOTOM_SPEED;
-			state.flotom.baseSpeed = FLOTOM_SPEED;
-		}
+		state.flotomTileX = null;
+		state.flotomTileY = null;
+		console.log("[clean] spawned flotom uid", state.flotom && state.flotom.uid, "tex", state.flotom && state.flotom.textureName);
 	};
 
 	const startCleaning = () => {
@@ -111,19 +109,36 @@
 		};
 	}
 
-	if (!game.map.functions.cleanStepHooked) {
-		game.map.functions.cleanStepHooked = true;
+	if (!game.player.cleanUpdateHooked) {
+		game.player.cleanUpdateHooked = true;
 
-		// keep leading flotom present after a map change
-		if (state.cleaning && !state.flotom) spawnFlotom();
+		const originalUpdate = game.player.update.bind(game.player);
+		game.player.update = function() {
+			originalUpdate();
+			if (!state.cleaning || !state.flotom) return;
 
-		const prevOnStep = game.map.functions.onStep;
-		game.map.functions.onStep = obj => {
-			if (prevOnStep) prevOnStep(obj);
-			if (!state.cleaning || !state.flotom || obj !== game.player) return;
-
+			// glue the flotom one tile ahead of the player's live position every frame
 			const front = tileAhead(game.player.x, game.player.y, game.player.direction);
-			state.flotom.moveTo(front[0], front[1], game.player.direction + 1, 1);
+			state.flotom.x = front[0];
+			state.flotom.y = front[1];
+
+			if (state.flotomDir !== game.player.direction) {
+				state.flotomDir = game.player.direction;
+				state.flotom.setDirection(game.player.direction);
+			}
+
+			// fire the flotom ontiles when it crosses into a new tile
+			const tileX = Math.round(state.flotom.x / TILE_SIZE) * TILE_SIZE;
+			const tileY = Math.round(state.flotom.y / TILE_SIZE) * TILE_SIZE;
+			if (tileX !== state.flotomTileX || tileY !== state.flotomTileY) {
+				state.flotomTileX = tileX;
+				state.flotomTileY = tileY;
+
+				const hasExecute = !!(game.map.execute[tileY] && game.map.execute[tileY][tileX]);
+				console.log("[clean] flotom tile", tileX, tileY, "uid", state.flotom.uid, "execute?", hasExecute);
+
+				game.map.checkTile(tileX + state.flotom.offset.x - 8, tileY + state.flotom.offset.y - 16, state.flotom);
+			}
 		};
 	}
 })(game)
