@@ -254,6 +254,20 @@
 	};
 
 	const openMenu = () => {
+		if (state.mode === "floating" || state.mode === "turbo") {
+			const label = state.mode === "floating" ? "Stop Floating" : "Stop Turbo";
+			const clearModeVar = state.mode === "floating" ? clearFloatingModeVar : clearTurboModeVar;
+			game.textbox.say("What would you like to do?");
+			game.textbox.answers([
+				[label, () => {
+					clearModeVar();
+					stopMode();
+				}],
+				["Nevermind", () => {}]
+			]);
+			return;
+		}
+
 		if (state.mode === "cleaning") {
 			game.textbox.say("What would you like to do?");
 			game.textbox.answers([
@@ -341,11 +355,19 @@
 				}
 			}
 
-			if (game.input.keyPressed("action") && game.textbox.active < 0 && state.mode !== "floating" && state.mode !== "turbo") {
+			const varSeen = state.mode === "floating" ? state.floatVarSeen : state.turboVarSeen;
+			const indefiniteMode = (state.mode === "floating" || state.mode === "turbo") &&
+				varSeen === 1 && !state.floatEngaged && !state.turboEngaged;
+
+			if (game.input.keyPressed("action") && game.textbox.active < 0 && (!state.mode || state.mode === "cleaning" || indefiniteMode)) {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+				const behind = tileBehind(game.player.x, game.player.y, game.player.direction);
 				const facing = state.mode ? state.flotom : getCleanAlly();
 
-				if (facing && facing.x === front[0] && facing.y === front[1]) {
+				const atFront = facing && facing.x === front[0] && facing.y === front[1];
+				const atBehind = indefiniteMode && facing && facing.x === behind[0] && facing.y === behind[1];
+
+				if (atFront || atBehind) {
 					openMenu();
 					return;
 				}
@@ -405,8 +427,10 @@
 
 			if (!state.mode) return;
 
-			// recalling the mon turns the mode off
+			// recalling the mon turns the mode off and closes its var
 			if (game.player.allyId.indexOf(CLEAN_MON) < 0) {
+				if (state.mode === "floating") clearFloatingModeVar();
+				if (state.mode === "turbo") clearTurboModeVar();
 				stopMode();
 				return;
 			}
