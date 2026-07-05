@@ -117,7 +117,10 @@
 		const originalUpdate = game.player.update.bind(game.player);
 		game.player.update = function() {
 			originalUpdate();
-			if (!state.cleaning || !state.flotom) return;
+			if (!state.cleaning) return;
+
+			// map reloads null the uid of string-uid objects, respawn right away
+			if (!state.flotom || !state.flotom.uid) spawnFlotom();
 
 			// glue the flotom one tile ahead of the player's live position every frame
 			const front = tileAhead(game.player.x, game.player.y, game.player.direction);
