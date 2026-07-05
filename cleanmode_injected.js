@@ -90,7 +90,7 @@
 		]);
 	};
 
-	if (state.cleaning && (!state.flotom || !game.objects.list.includes(state.flotom))) spawnFlotom();
+	if (state.cleaning && (!state.flotom || !state.flotom.uid)) spawnFlotom();
 
 	if (!game.player.cleanKeysHooked) {
 		game.player.cleanKeysHooked = true;
