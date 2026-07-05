@@ -10,6 +10,9 @@
 	const HOLD_DURATION = 4000;
 	const DESCENT_DURATION = 1000;
 	const FLOAT_COOLDOWN = 1000;
+	const TURBO_SPEED = 6;
+
+	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
 	const state = game.player.cleanState || (game.player.cleanState = {
 		mode: null,
@@ -28,6 +31,10 @@
 		awaitingLand: false,
 		cooldownUntil: 0,
 		jumpBlocked: false,
+		turboEngaged: false,
+		turboDirection: 0,
+		turboVarSeen: 0,
+		turboDeadline: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -67,7 +74,7 @@
 	};
 
 	const glueTarget = () => {
-		if (state.mode === "floating") return tileBehind(game.player.x, game.player.y, game.player.direction);
+		if (state.mode === "floating" || state.mode === "turbo") return tileBehind(game.player.x, game.player.y, game.player.direction);
 		return tileAhead(game.player.x, game.player.y, game.player.direction);
 	};
 
@@ -111,6 +118,12 @@
 		game.trigger("var[floatingmode]=0");
 	};
 
+	const clearTurboModeVar = () => {
+		if (typeof game.map.eventVars["turbomode"] !== "undefined") game.map.eventVars["turbomode"] = 0;
+		if (typeof game.map.mapVars["turbomode"] !== "undefined") game.map.mapVars["turbomode"] = 0;
+		game.trigger("var[turbomode]=0");
+	};
+
 	const getCleanAlly = () => {
 		let ally = game.player.ally;
 		while (ally) {
@@ -138,7 +151,7 @@
 		state.flotomTileY = null;
 
 		// splash array layout matches map splash tiles: [.., .., sprite, frames, fps, loop]
-		if (state.mode === "cleaning" || state.floatEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+		if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 
 		if (state.floatEngaged) {
 			state.flotom.floating = 1;
@@ -186,6 +199,25 @@
 		stopSpray();
 	};
 
+	const engageTurbo = () => {
+		state.turboEngaged = true;
+		state.turboDirection = game.player.direction;
+		game.map.globalVars["cleanmode"] = 1;
+
+		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+
+		startSpray();
+	};
+
+	const disengageTurbo = () => {
+		state.turboEngaged = false;
+		game.map.globalVars["cleanmode"] = 0;
+
+		if (state.flotom) state.flotom.destroySplash();
+
+		stopSpray();
+	};
+
 	const startMode = mode => {
 		state.mode = mode;
 		state.cleanAlly = getCleanAlly();
@@ -200,6 +232,7 @@
 
 	const stopMode = () => {
 		if (state.floatEngaged) disengageFloat();
+		if (state.turboEngaged) disengageTurbo();
 		if (state.jumpBlocked) {
 			state.jumpBlocked = false;
 			game.map.noJumping = state.prevNoJumping;
@@ -240,6 +273,13 @@
 	if (!game.player.cleanKeysHooked) {
 		game.player.cleanKeysHooked = true;
 
+		// engine recomputes speed every frame from the run key, so override the property while turbo is engaged
+		let storedSpeed = game.player.speed;
+		Object.defineProperty(game.player, "speed", {
+			get: () => (state.turboEngaged ? TURBO_SPEED : storedSpeed),
+			set: value => { storedSpeed = value; }
+		});
+
 		const originalLocalKeys = game.player.localKeys.bind(game.player);
 		game.player.localKeys = function(moving) {
 			// float while the jump key is held
@@ -261,7 +301,47 @@
 				else if (!held && state.floatEngaged) disengageFloat();
 			}
 
-			if (game.input.keyPressed("action") && game.textbox.active < 0 && state.mode !== "floating") {
+			// turbo runs forward while the jump key is held
+			if (state.mode === "turbo") {
+				const held = game.input.keyHeld("jump");
+				if (held && !state.turboEngaged && game.textbox.active < 0 && game.player.canMove) engageTurbo();
+				else if (!held && state.turboEngaged) disengageTurbo();
+
+				if (state.turboEngaged) {
+					if (game.textbox.active > -1 || !game.player.canMove || game.map.loading) {
+						disengageTurbo();
+					} else {
+						// steer left or right only, never straight back
+						let steer = -1;
+						if (game.input.keyHeld("up")) steer = 1;
+						else if (game.input.keyHeld("down")) steer = 0;
+						else if (game.input.keyHeld("left")) steer = 3;
+						else if (game.input.keyHeld("right")) steer = 2;
+
+						if (steer > -1 && steer !== state.turboDirection && steer !== OPPOSITE_DIRECTION[state.turboDirection]) {
+							state.turboDirection = steer;
+							game.player.setDirection(steer);
+							game.client.cache[1][1] = steer;
+							game.client.relay(game.client.cache[1]);
+						}
+
+						if (game.input.keyPressed("action") && !game.player.hover) {
+							game.player.jump(game.map.getVar("jump_height", 8));
+						}
+
+						// same forced step the engine uses for sliding
+						if (!game.player.moving && !game.player.stopped && !game.player.stop) {
+							const ahead = tileAhead(game.player.x, game.player.y, state.turboDirection);
+							game.player.moving = true;
+							game.player.queue.add(0, ahead[0], ahead[1], state.turboDirection);
+						}
+
+						return;
+					}
+				}
+			}
+
+			if (game.input.keyPressed("action") && game.textbox.active < 0 && state.mode !== "floating" && state.mode !== "turbo") {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
 				const facing = state.mode ? state.flotom : getCleanAlly();
 
@@ -303,6 +383,24 @@
 				const expired = state.floatDeadline && Date.now() >= state.floatDeadline;
 				if (expired) clearFloatingModeVar();
 				if (expired || !floatingVar) stopMode();
+			}
+
+			// var[turbomode]: 1 = on until zeroed, above 1 = seconds until it zeroes itself
+			const turboVar = +game.map.getVar("turbomode", 0) || 0;
+			if (!state.mode && turboVar >= 1) {
+				startMode("turbo");
+				state.turboVarSeen = turboVar;
+				state.turboDeadline = turboVar > 1 ? Date.now() + turboVar * 1000 : 0;
+			} else if (state.mode === "turbo") {
+				// re-arm the timer if the var value changed while the mode was already running
+				if (turboVar && turboVar !== state.turboVarSeen) {
+					state.turboVarSeen = turboVar;
+					state.turboDeadline = turboVar > 1 ? Date.now() + turboVar * 1000 : 0;
+				}
+
+				const expired = state.turboDeadline && Date.now() >= state.turboDeadline;
+				if (expired) clearTurboModeVar();
+				if (expired || !turboVar) stopMode();
 			}
 
 			if (!state.mode) return;
@@ -347,7 +445,7 @@
 			// refresh strips sprites without nulling the uid, re-add and rebuild the splash
 			if (!state.flotom.nearby) {
 				state.flotom.addToMap();
-				if (state.mode === "cleaning" || state.floatEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+				if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 			}
 
 			const spot = glueTarget();
@@ -378,6 +476,7 @@
 
 			// only fire ontiles while cleanmode is active
 			if (state.mode === "floating" && !state.floatEngaged) return;
+			if (state.mode === "turbo" && !state.turboEngaged) return;
 
 			const tileX = Math.round(state.flotom.x / TILE_SIZE) * TILE_SIZE;
 			const tileY = Math.round(state.flotom.y / TILE_SIZE) * TILE_SIZE;
