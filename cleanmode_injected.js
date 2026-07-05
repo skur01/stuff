@@ -1,69 +1,117 @@
 (game => {
 	if (!game.map || !game.player) return;
 
-	if (game.player.cleanmodeHooked) return;
-	game.player.cleanmodeHooked = true;
-
 	const CLEAN_MON = "00zw418h";
-	const WATERSPRAY_1 = "https://www.dropbox.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
-	const WATERSPRAY_2 = "https://www.dropbox.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
+	const FLOTOM_UID = "flotom";
+	const WATERSPRAY_1 = "https://dl.dropboxusercontent.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
+	const WATERSPRAY_2 = "https://dl.dropboxusercontent.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
+	const TILE_SIZE = 16;
 
-	const mapId = game.map.id;
-
-	let engaged = false;
-	let engagedMap = null;
-	let prevNoJumping = false;
-	let spray1 = null;
-	let spray2 = null;
-
-	const hasMonOut = () => {
-		const party = game.player.party;
-		if (!party) return false;
-		for (const mon of party.mons) {
-			if (mon && mon.outAsAlly && mon.data && mon.data.uid === CLEAN_MON) return true;
-		}
-		return false;
-	};
+	const state = game.player.cleanState || (game.player.cleanState = { cleaning: false, flotom: null, spray1: null, spray2: null });
 
 	const startSpray = () => {
-		spray1 = game.sound.play(WATERSPRAY_1, false, () => {
-			spray1 = null;
-			if (!engaged) return;
-			spray2 = game.sound.play(WATERSPRAY_2, false);
-			if (spray2) spray2.loop = true;
+		state.spray1 = game.sound.play(WATERSPRAY_1, false, () => {
+			state.spray1 = null;
+			if (!state.cleaning) return;
+			state.spray2 = game.sound.play(WATERSPRAY_2, false);
+			if (state.spray2) state.spray2.loop = true;
 		});
 	};
 
 	const stopSpray = () => {
-		if (spray1) {
-			spray1.stop();
-			spray1 = null;
+		if (state.spray1) { state.spray1.stop(); state.spray1 = null; }
+		if (state.spray2) { state.spray2.stop(); state.spray2 = null; }
+	};
+
+	// tile one step from (x, y) facing direction (0 down, 1 up, 2 right, 3 left)
+	const tileAhead = (x, y, direction) => {
+		if (direction === 0) return [x, y + TILE_SIZE];
+		if (direction === 1) return [x, y - TILE_SIZE];
+		if (direction === 2) return [x + TILE_SIZE, y];
+		return [x - TILE_SIZE, y];
+	};
+
+	const getCleanAlly = () => {
+		let ally = game.player.ally;
+		while (ally) {
+			if (ally.skin === CLEAN_MON || (ally.textureName && ally.textureName.includes(CLEAN_MON))) return ally;
+			ally = ally.ally;
 		}
-		if (spray2) {
-			spray2.stop();
-			spray2 = null;
+		return null;
+	};
+
+	const spawnFlotom = () => {
+		const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+		state.flotom = game.objects.add({
+			type: "entity",
+			uid: FLOTOM_UID,
+			texture: CLEAN_MON,
+			x: front[0],
+			y: front[1],
+			direction: game.player.direction,
+			map: game.map.current,
+			addToMap: true,
+			solid: false
+		});
+	};
+
+	const startCleaning = () => {
+		state.cleaning = true;
+		game.map.eventVars["cleanmode"] = 1;
+		spawnFlotom();
+		startSpray();
+	};
+
+	const stopCleaning = () => {
+		state.cleaning = false;
+		game.map.eventVars["cleanmode"] = 0;
+		stopSpray();
+		if (state.flotom) {
+			state.flotom.remove();
+			state.flotom = null;
 		}
 	};
 
-	const originalLocalKeys = game.player.localKeys.bind(game.player);
-	game.player.localKeys = function(moving) {
-		const active = game.map.id === mapId && game.input.keyHeld("jump") && hasMonOut();
-
-		if (active && !engaged) {
-			engaged = true;
-			engagedMap = game.map;
-			prevNoJumping = game.map.noJumping;
-			game.map.noJumping = true;
-			game.map.eventVars["cleanmode"] = 1;
-			startSpray();
-		} else if (!active && engaged) {
-			engaged = false;
-			engagedMap.noJumping = prevNoJumping;
-			engagedMap.eventVars["cleanmode"] = 0;
-			engagedMap = null;
-			stopSpray();
-		}
-
-		originalLocalKeys(moving);
+	const openMenu = () => {
+		const label = state.cleaning ? "Stop Cleaning" : "Cleaning Mode";
+		context({ presetX: window.innerWidth / 2, presetY: window.innerHeight / 2 }, [
+			[label, () => state.cleaning ? stopCleaning() : startCleaning()]
+		]);
 	};
+
+	if (!game.player.cleanKeysHooked) {
+		game.player.cleanKeysHooked = true;
+
+		const originalLocalKeys = game.player.localKeys.bind(game.player);
+		game.player.localKeys = function(moving) {
+			if (game.input.keyPressed("action") && !CONTEXT_MENU.current) {
+				const ally = getCleanAlly();
+				if (ally) {
+					const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+					if (ally.x === front[0] && ally.y === front[1]) {
+						openMenu();
+						return;
+					}
+				}
+			}
+
+			originalLocalKeys(moving);
+		};
+	}
+
+	if (!game.map.functions.cleanStepHooked) {
+		game.map.functions.cleanStepHooked = true;
+
+		// keep leading flotom present after a map change
+		if (state.cleaning && !state.flotom) spawnFlotom();
+
+		const prevOnStep = game.map.functions.onStep;
+		game.map.functions.onStep = obj => {
+			if (prevOnStep) prevOnStep(obj);
+			if (!state.cleaning || !state.flotom || obj !== game.player) return;
+
+			const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+			state.flotom.moveTo(front[0], front[1], game.player.direction + 1, 1);
+		};
+	}
 })(game)
