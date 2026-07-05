@@ -56,6 +56,9 @@
 		});
 		state.flotomTileX = null;
 		state.flotomTileY = null;
+
+		// splash array layout matches map splash tiles: [.., .., sprite, frames, fps, loop]
+		state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 	};
 
 	const startCleaning = () => {
@@ -72,6 +75,7 @@
 		game.map.eventVars["cleanmode"] = 0;
 		stopSpray();
 		if (state.flotom) {
+			state.flotom.destroySplash();
 			state.flotom.remove();
 			state.flotom = null;
 		}
