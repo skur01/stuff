@@ -6,8 +6,9 @@
 	const WATERSPRAY_1 = "https://dl.dropboxusercontent.com/scl/fi/ic8z5es3s55p5v7g1w0dk/Waterspray1.ogg?rlkey=hddsmf1779vhmkhx7hhssfo2h&dl=1";
 	const WATERSPRAY_2 = "https://dl.dropboxusercontent.com/scl/fi/ljsoxpe4lvr1nxm5j5q71/Waterspray2.ogg?rlkey=hku5lng0h72c515o9lqfqrm87&dl=1";
 	const TILE_SIZE = 16;
+	const FLOTOM_SPEED = 1000;
 
-	const state = game.player.cleanState || (game.player.cleanState = { cleaning: false, flotom: null, spray1: null, spray2: null });
+	const state = game.player.cleanState || (game.player.cleanState = { cleaning: false, flotom: null, cleanAlly: null, spray1: null, spray2: null });
 
 	const startSpray = () => {
 		state.spray1 = game.sound.play(WATERSPRAY_1, false, () => {
@@ -53,11 +54,17 @@
 			addToMap: true,
 			solid: false
 		});
+		if (state.flotom) {
+			state.flotom.speed = FLOTOM_SPEED;
+			state.flotom.baseSpeed = FLOTOM_SPEED;
+		}
 	};
 
 	const startCleaning = () => {
 		state.cleaning = true;
 		game.map.eventVars["cleanmode"] = 1;
+		state.cleanAlly = getCleanAlly();
+		if (state.cleanAlly) state.cleanAlly.setOpacity(0);
 		spawnFlotom();
 		startSpray();
 	};
@@ -70,12 +77,18 @@
 			state.flotom.remove();
 			state.flotom = null;
 		}
+		if (state.cleanAlly) {
+			state.cleanAlly.setOpacity(100);
+			state.cleanAlly = null;
+		}
 	};
 
 	const openMenu = () => {
 		const label = state.cleaning ? "Stop Cleaning" : "Cleaning Mode";
-		context({ presetX: window.innerWidth / 2, presetY: window.innerHeight / 2 }, [
-			[label, () => state.cleaning ? stopCleaning() : startCleaning()]
+		game.textbox.say("What would you like to do?");
+		game.textbox.answers([
+			[label, () => state.cleaning ? stopCleaning() : startCleaning()],
+			["Nevermind", () => {}]
 		]);
 	};
 
@@ -84,14 +97,13 @@
 
 		const originalLocalKeys = game.player.localKeys.bind(game.player);
 		game.player.localKeys = function(moving) {
-			if (game.input.keyPressed("action") && !CONTEXT_MENU.current) {
-				const ally = getCleanAlly();
-				if (ally) {
-					const front = tileAhead(game.player.x, game.player.y, game.player.direction);
-					if (ally.x === front[0] && ally.y === front[1]) {
-						openMenu();
-						return;
-					}
+			if (game.input.keyPressed("action") && game.textbox.active < 0) {
+				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
+				const facing = state.cleaning ? state.flotom : getCleanAlly();
+
+				if (facing && facing.x === front[0] && facing.y === front[1]) {
+					openMenu();
+					return;
 				}
 			}
 
