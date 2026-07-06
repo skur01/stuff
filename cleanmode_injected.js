@@ -16,7 +16,7 @@
 	const DASH_SPRAY_DURATION = 750;
 	const DASH_JUMP_BONUS_TILES = 4;
 	const DASH_END_SPEED = 2;
-	const DASH_COOLDOWN = 500;
+	const DASH_COOLDOWN = 400;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -461,7 +461,7 @@
 				}
 
 				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
-				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving && !game.player.hover && Date.now() >= state.dashCooldownUntil) {
+				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.hover && Date.now() >= state.dashCooldownUntil) {
 					state.dashQueued = false;
 					engageDash();
 				}
