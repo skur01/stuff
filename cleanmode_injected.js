@@ -100,6 +100,9 @@
 		return tileAhead(game.player.x, game.player.y, game.player.direction);
 	};
 
+	// paths from triggers and slides take over movement, engaging on top of them corrupts the route
+	const isForcedMoving = () => !!(game.player.path || game.player.sliding);
+
 	// samples the baked foreground canvas for any visible pixels in the given map-space rect
 	const hasForegroundPixels = (x, y, w, h) => {
 		if (!game.map.tilemaps.foreground.length) return false;
@@ -362,7 +365,7 @@
 			if (state.mode === "floating") {
 				const held = game.input.keyHeld("jump");
 				const coolingDown = state.descending || Date.now() < state.cooldownUntil;
-				const canEngage = !state.floatEngaged && !coolingDown;
+				const canEngage = !state.floatEngaged && !coolingDown && !isForcedMoving();
 
 				// no real jumps while drifting down or cooling down
 				if (coolingDown && !state.floatEngaged && !state.jumpBlocked) {
@@ -374,17 +377,17 @@
 				}
 
 				if (held && canEngage) engageFloat();
-				else if (!held && state.floatEngaged) disengageFloat();
+				else if ((!held || isForcedMoving()) && state.floatEngaged) disengageFloat();
 			}
 
 			// turbo runs forward while the jump key is held
 			if (state.mode === "turbo") {
 				const held = game.input.keyHeld("jump");
-				if (held && !state.turboEngaged && game.textbox.active < 0 && game.player.canMove) engageTurbo();
+				if (held && !state.turboEngaged && game.textbox.active < 0 && game.player.canMove && !isForcedMoving()) engageTurbo();
 				else if (!held && state.turboEngaged) disengageTurbo();
 
 				if (state.turboEngaged) {
-					if (game.textbox.active > -1 || !game.player.canMove || game.map.loading) {
+					if (game.textbox.active > -1 || !game.player.canMove || game.map.loading || isForcedMoving()) {
 						disengageTurbo();
 					} else {
 						// steer left or right only, never straight back
@@ -425,6 +428,9 @@
 					state.prevNoJumping = game.map.noJumping;
 					game.map.noJumping = true;
 				}
+
+				// a path taking over mid dash aborts it
+				if (state.dashEngaged && isForcedMoving()) disengageDash();
 
 				if (state.dashEngaged) {
 					// buffer presses so spamming chains straight into the next dash
@@ -474,7 +480,7 @@
 				if (state.dashQueued && Date.now() - state.dashQueuedAt > DASH_QUEUE_WINDOW) state.dashQueued = false;
 
 				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
-				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.hover && Date.now() >= state.dashCooldownUntil) {
+				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.hover && !isForcedMoving() && Date.now() >= state.dashCooldownUntil) {
 					state.dashQueued = false;
 					engageDash();
 				}
