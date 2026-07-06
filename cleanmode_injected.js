@@ -11,6 +11,8 @@
 	const DESCENT_DURATION = 1000;
 	const FLOAT_COOLDOWN = 1000;
 	const TURBO_SPEED = 6;
+	const DASH_SPEED = 8;
+	const DASH_TILES = 5;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -35,6 +37,13 @@
 		turboDirection: 0,
 		turboVarSeen: 0,
 		turboDeadline: 0,
+		dashEngaged: false,
+		dashDirection: 0,
+		dashStepsLeft: 0,
+		dashLastX: null,
+		dashLastY: null,
+		dashVarSeen: 0,
+		dashDeadline: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -74,7 +83,7 @@
 	};
 
 	const glueTarget = () => {
-		if (state.mode === "floating" || state.mode === "turbo") return tileBehind(game.player.x, game.player.y, game.player.direction);
+		if (state.mode === "floating" || state.mode === "turbo" || state.mode === "dash") return tileBehind(game.player.x, game.player.y, game.player.direction);
 		return tileAhead(game.player.x, game.player.y, game.player.direction);
 	};
 
@@ -124,6 +133,12 @@
 		game.trigger("var[turbomode]=0");
 	};
 
+	const clearDashModeVar = () => {
+		if (typeof game.map.eventVars["dashmode"] !== "undefined") game.map.eventVars["dashmode"] = 0;
+		if (typeof game.map.mapVars["dashmode"] !== "undefined") game.map.mapVars["dashmode"] = 0;
+		game.trigger("var[dashmode]=0");
+	};
+
 	const getCleanAlly = () => {
 		let ally = game.player.ally;
 		while (ally) {
@@ -151,7 +166,7 @@
 		state.flotomTileY = null;
 
 		// splash array layout matches map splash tiles: [.., .., sprite, frames, fps, loop]
-		if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+		if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged || state.dashEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 
 		if (state.floatEngaged) {
 			state.flotom.floating = 1;
@@ -218,6 +233,28 @@
 		stopSpray();
 	};
 
+	const engageDash = () => {
+		state.dashEngaged = true;
+		state.dashDirection = game.player.direction;
+		state.dashStepsLeft = DASH_TILES;
+		state.dashLastX = null;
+		state.dashLastY = null;
+		game.trigger("var[cleanmode]=1");
+
+		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+
+		startSpray();
+	};
+
+	const disengageDash = () => {
+		state.dashEngaged = false;
+		game.trigger("var[cleanmode]=0");
+
+		if (state.flotom) state.flotom.destroySplash();
+
+		stopSpray();
+	};
+
 	const startMode = mode => {
 		state.mode = mode;
 		state.cleanAlly = getCleanAlly();
@@ -233,6 +270,7 @@
 	const stopMode = () => {
 		if (state.floatEngaged) disengageFloat();
 		if (state.turboEngaged) disengageTurbo();
+		if (state.dashEngaged) disengageDash();
 		if (state.jumpBlocked) {
 			state.jumpBlocked = false;
 			game.map.noJumping = state.prevNoJumping;
@@ -254,12 +292,13 @@
 	};
 
 	const openMenu = () => {
-		if (state.mode === "floating" || state.mode === "turbo") {
-			const label = state.mode === "floating" ? "Stop Floating" : "Stop Turbo";
-			const clearModeVar = state.mode === "floating" ? clearFloatingModeVar : clearTurboModeVar;
+		if (state.mode === "floating" || state.mode === "turbo" || state.mode === "dash") {
+			const labels = { floating: "Stop Floating", turbo: "Stop Turbo", dash: "Stop Dashing" };
+			const clearers = { floating: clearFloatingModeVar, turbo: clearTurboModeVar, dash: clearDashModeVar };
+			const clearModeVar = clearers[state.mode];
 			game.textbox.say("What would you like to do?");
 			game.textbox.answers([
-				[label, () => {
+				[labels[state.mode], () => {
 					clearModeVar();
 					stopMode();
 				}],
@@ -287,10 +326,10 @@
 	if (!game.player.cleanKeysHooked) {
 		game.player.cleanKeysHooked = true;
 
-		// engine recomputes speed every frame from the run key, so override the property while turbo is engaged
+		// engine recomputes speed every frame from the run key, so override the property while turbo or dash is engaged
 		let storedSpeed = game.player.speed;
 		Object.defineProperty(game.player, "speed", {
-			get: () => (state.turboEngaged ? TURBO_SPEED : storedSpeed),
+			get: () => (state.turboEngaged ? TURBO_SPEED : state.dashEngaged ? DASH_SPEED : storedSpeed),
 			set: value => { storedSpeed = value; }
 		});
 
@@ -355,9 +394,36 @@
 				}
 			}
 
-			const varSeen = state.mode === "floating" ? state.floatVarSeen : state.turboVarSeen;
-			const indefiniteMode = (state.mode === "floating" || state.mode === "turbo") &&
-				varSeen === 1 && !state.floatEngaged && !state.turboEngaged;
+			// dash bolts the player forward on a jump press
+			if (state.mode === "dash") {
+				if (state.dashEngaged) {
+					if (!game.player.moving) {
+						const blocked = game.player.x === state.dashLastX && game.player.y === state.dashLastY;
+
+						if (blocked || state.dashStepsLeft <= 0) {
+							disengageDash();
+						} else {
+							--state.dashStepsLeft;
+							state.dashLastX = game.player.x;
+							state.dashLastY = game.player.y;
+
+							// same forced step the engine uses for sliding
+							const ahead = tileAhead(game.player.x, game.player.y, state.dashDirection);
+							game.player.moving = true;
+							game.player.queue.add(0, ahead[0], ahead[1], state.dashDirection);
+						}
+					}
+
+					// no turning or other input mid dash
+					if (state.dashEngaged) return;
+				} else if (game.input.keyPressed("jump") && game.textbox.active < 0 && game.player.canMove && !game.player.moving) {
+					engageDash();
+				}
+			}
+
+			const varSeens = { floating: state.floatVarSeen, turbo: state.turboVarSeen, dash: state.dashVarSeen };
+			const indefiniteMode = (state.mode === "floating" || state.mode === "turbo" || state.mode === "dash") &&
+				varSeens[state.mode] === 1 && !state.floatEngaged && !state.turboEngaged && !state.dashEngaged;
 
 			if (game.input.keyPressed("action") && game.textbox.active < 0 && (!state.mode || state.mode === "cleaning" || indefiniteMode)) {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
@@ -425,12 +491,31 @@
 				if (expired || !turboVar) stopMode();
 			}
 
+			// var[dashmode]: 1 = on until zeroed, above 1 = seconds until it zeroes itself
+			const dashVar = +game.map.getVar("dashmode", 0) || 0;
+			if (!state.mode && dashVar >= 1) {
+				startMode("dash");
+				state.dashVarSeen = dashVar;
+				state.dashDeadline = dashVar > 1 ? Date.now() + dashVar * 1000 : 0;
+			} else if (state.mode === "dash") {
+				// re-arm the timer if the var value changed while the mode was already running
+				if (dashVar && dashVar !== state.dashVarSeen) {
+					state.dashVarSeen = dashVar;
+					state.dashDeadline = dashVar > 1 ? Date.now() + dashVar * 1000 : 0;
+				}
+
+				const expired = state.dashDeadline && Date.now() >= state.dashDeadline;
+				if (expired) clearDashModeVar();
+				if (expired || !dashVar) stopMode();
+			}
+
 			if (!state.mode) return;
 
 			// recalling the mon turns the mode off and closes its var
 			if (game.player.allyId.indexOf(CLEAN_MON) < 0) {
 				if (state.mode === "floating") clearFloatingModeVar();
 				if (state.mode === "turbo") clearTurboModeVar();
+				if (state.mode === "dash") clearDashModeVar();
 				stopMode();
 				return;
 			}
@@ -469,7 +554,7 @@
 			// refresh strips sprites without nulling the uid, re-add and rebuild the splash
 			if (!state.flotom.nearby) {
 				state.flotom.addToMap();
-				if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
+				if (state.mode === "cleaning" || state.floatEngaged || state.turboEngaged || state.dashEngaged) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 			}
 
 			const spot = glueTarget();
@@ -501,6 +586,7 @@
 			// only fire ontiles while cleanmode is active
 			if (state.mode === "floating" && !state.floatEngaged) return;
 			if (state.mode === "turbo" && !state.turboEngaged) return;
+			if (state.mode === "dash" && !state.dashEngaged) return;
 
 			const tileX = Math.round(state.flotom.x / TILE_SIZE) * TILE_SIZE;
 			const tileY = Math.round(state.flotom.y / TILE_SIZE) * TILE_SIZE;
