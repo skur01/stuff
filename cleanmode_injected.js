@@ -14,8 +14,8 @@
 	const DASH_SPEED = 8;
 	const DASH_TILES = 5;
 	const DASH_SPRAY_DURATION = 750;
-	const DASH_JUMP_EXTRA_HEIGHT = 4;
 	const DASH_JUMP_BONUS_TILES = 4;
+	const DASH_END_SPEED = 2;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -48,6 +48,8 @@
 		dashVarSeen: 0,
 		dashDeadline: 0,
 		dashQueued: false,
+		dashJumped: false,
+		dashSpeed: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -243,6 +245,8 @@
 		state.dashStepsLeft = DASH_TILES;
 		state.dashLastX = null;
 		state.dashLastY = null;
+		state.dashJumped = false;
+		state.dashSpeed = DASH_SPEED;
 		game.trigger("var[cleanmode]=1");
 
 		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
@@ -334,7 +338,7 @@
 		// engine recomputes speed every frame from the run key, so override the property while turbo or dash is engaged
 		let storedSpeed = game.player.speed;
 		Object.defineProperty(game.player, "speed", {
-			get: () => (state.turboEngaged ? TURBO_SPEED : state.dashEngaged ? DASH_SPEED : storedSpeed),
+			get: () => (state.turboEngaged ? TURBO_SPEED : state.dashEngaged ? (state.dashSpeed || DASH_SPEED) : storedSpeed),
 			set: value => { storedSpeed = value; }
 		});
 
@@ -413,9 +417,10 @@
 					if (game.input.keyPressed("jump")) state.dashQueued = true;
 
 					if (game.input.keyPressed("action") && !game.player.hover) {
-						// dash jumps arc higher and the extra steps carry the player further
-						game.player.jump(game.map.getVar("jump_height", 8) + DASH_JUMP_EXTRA_HEIGHT);
+						// the extra steps carry the player further
+						game.player.jump(game.map.getVar("jump_height", 8));
 						state.dashStepsLeft += DASH_JUMP_BONUS_TILES;
+						state.dashJumped = true;
 					}
 
 					if (!game.player.moving) {
@@ -427,6 +432,11 @@
 							--state.dashStepsLeft;
 							state.dashLastX = game.player.x;
 							state.dashLastY = game.player.y;
+
+							// bleed off speed across the jump bonus tiles, like losing momentum
+							if (state.dashJumped && state.dashStepsLeft < DASH_JUMP_BONUS_TILES) {
+								state.dashSpeed = DASH_END_SPEED + (DASH_SPEED - DASH_END_SPEED) * state.dashStepsLeft / DASH_JUMP_BONUS_TILES;
+							}
 
 							// same forced step the engine uses for sliding
 							const ahead = tileAhead(game.player.x, game.player.y, state.dashDirection);
