@@ -399,6 +399,13 @@
 
 			// dash bolts the player forward on a jump press
 			if (state.mode === "dash") {
+				// no real jumps anywhere in dash mode
+				if (!state.jumpBlocked) {
+					state.jumpBlocked = true;
+					state.prevNoJumping = game.map.noJumping;
+					game.map.noJumping = true;
+				}
+
 				if (state.dashEngaged) {
 					// buffer presses so spamming chains straight into the next dash
 					if (game.input.keyPressed("jump")) state.dashQueued = true;
@@ -429,7 +436,7 @@
 				}
 
 				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
-				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving) {
+				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving && !game.player.hover) {
 					state.dashQueued = false;
 					engageDash();
 				}
