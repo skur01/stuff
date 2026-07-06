@@ -16,7 +16,8 @@
 	const DASH_SPRAY_DURATION = 750;
 	const DASH_JUMP_BONUS_TILES = 4;
 	const DASH_END_SPEED = 2;
-	const DASH_COOLDOWN = 400;
+	const DASH_COOLDOWN = 250;
+	const INTERACT_BUFFER = 1000;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -53,6 +54,7 @@
 		dashSpeed: 0,
 		dashStepsTaken: 0,
 		dashCooldownUntil: 0,
+		interactBufferUntil: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -205,6 +207,7 @@
 	const disengageFloat = () => {
 		state.floatEngaged = false;
 		state.awaitingLand = true;
+		state.interactBufferUntil = Date.now() + INTERACT_BUFFER;
 		game.map.noJumping = state.prevNoJumping;
 		game.trigger("var[cleanmode]=0");
 		game.player.floating = 0;
@@ -235,6 +238,7 @@
 
 	const disengageTurbo = () => {
 		state.turboEngaged = false;
+		state.interactBufferUntil = Date.now() + INTERACT_BUFFER;
 		game.trigger("var[cleanmode]=0");
 
 		if (state.flotom) state.flotom.destroySplash();
@@ -262,6 +266,7 @@
 
 	const disengageDash = () => {
 		state.dashEngaged = false;
+		state.interactBufferUntil = Date.now() + INTERACT_BUFFER;
 		game.trigger("var[cleanmode]=0");
 
 		// a dash cut short by a wall never reached the point where the cooldown was armed
@@ -469,7 +474,8 @@
 
 			const varSeens = { floating: state.floatVarSeen, turbo: state.turboVarSeen, dash: state.dashVarSeen };
 			const indefiniteMode = (state.mode === "floating" || state.mode === "turbo" || state.mode === "dash") &&
-				varSeens[state.mode] === 1 && !state.floatEngaged && !state.turboEngaged && !state.dashEngaged;
+				varSeens[state.mode] === 1 && !state.floatEngaged && !state.turboEngaged && !state.dashEngaged &&
+				Date.now() >= state.interactBufferUntil;
 
 			if (game.input.keyPressed("action") && game.textbox.active < 0 && (!state.mode || state.mode === "cleaning" || indefiniteMode)) {
 				const front = tileAhead(game.player.x, game.player.y, game.player.direction);
