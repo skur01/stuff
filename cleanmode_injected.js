@@ -14,6 +14,8 @@
 	const DASH_SPEED = 8;
 	const DASH_TILES = 5;
 	const DASH_SPRAY_DURATION = 750;
+	const DASH_JUMP_EXTRA_HEIGHT = 4;
+	const DASH_JUMP_BONUS_TILES = 4;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -411,7 +413,9 @@
 					if (game.input.keyPressed("jump")) state.dashQueued = true;
 
 					if (game.input.keyPressed("action") && !game.player.hover) {
-						game.player.jump(game.map.getVar("jump_height", 8));
+						// dash jumps arc higher and the extra steps carry the player further
+						game.player.jump(game.map.getVar("jump_height", 8) + DASH_JUMP_EXTRA_HEIGHT);
+						state.dashStepsLeft += DASH_JUMP_BONUS_TILES;
 					}
 
 					if (!game.player.moving) {
