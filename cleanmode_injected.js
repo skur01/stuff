@@ -17,6 +17,7 @@
 	const DASH_JUMP_BONUS_TILES = 4;
 	const DASH_END_SPEED = 2;
 	const DASH_COOLDOWN = 250;
+	const DASH_QUEUE_WINDOW = 200;
 	const INTERACT_BUFFER = 1000;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
@@ -50,6 +51,7 @@
 		dashVarSeen: 0,
 		dashDeadline: 0,
 		dashQueued: false,
+		dashQueuedAt: 0,
 		dashJumped: false,
 		dashSpeed: 0,
 		dashStepsTaken: 0,
@@ -426,7 +428,10 @@
 
 				if (state.dashEngaged) {
 					// buffer presses so spamming chains straight into the next dash
-					if (game.input.keyPressed("jump")) state.dashQueued = true;
+					if (game.input.keyPressed("jump")) {
+						state.dashQueued = true;
+						state.dashQueuedAt = Date.now();
+					}
 
 					if (game.input.keyPressed("action") && !game.player.hover) {
 						// the extra steps carry the player further
@@ -464,6 +469,9 @@
 					// no turning or other input mid dash
 					if (state.dashEngaged) return;
 				}
+
+				// stale buffered presses expire instead of auto-firing a second dash later
+				if (state.dashQueued && Date.now() - state.dashQueuedAt > DASH_QUEUE_WINDOW) state.dashQueued = false;
 
 				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
 				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.hover && Date.now() >= state.dashCooldownUntil) {
