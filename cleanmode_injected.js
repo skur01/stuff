@@ -16,6 +16,7 @@
 	const DASH_SPRAY_DURATION = 750;
 	const DASH_JUMP_BONUS_TILES = 4;
 	const DASH_END_SPEED = 2;
+	const DASH_COOLDOWN = 500;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -50,6 +51,8 @@
 		dashQueued: false,
 		dashJumped: false,
 		dashSpeed: 0,
+		dashStepsTaken: 0,
+		dashCooldownUntil: 0,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -247,6 +250,7 @@
 		state.dashLastY = null;
 		state.dashJumped = false;
 		state.dashSpeed = DASH_SPEED;
+		state.dashStepsTaken = 0;
 		game.trigger("var[cleanmode]=1");
 
 		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
@@ -259,6 +263,9 @@
 	const disengageDash = () => {
 		state.dashEngaged = false;
 		game.trigger("var[cleanmode]=0");
+
+		// a dash cut short by a wall never reached the point where the cooldown was armed
+		if (state.dashStepsTaken < DASH_TILES) state.dashCooldownUntil = Date.now() + DASH_COOLDOWN;
 
 		if (state.flotom) state.flotom.destroySplash();
 	};
@@ -430,8 +437,12 @@
 							disengageDash();
 						} else {
 							--state.dashStepsLeft;
+							++state.dashStepsTaken;
 							state.dashLastX = game.player.x;
 							state.dashLastY = game.player.y;
+
+							// cooldown runs from where the base dash would end, so a long jump's carry eats it
+							if (state.dashStepsTaken === DASH_TILES) state.dashCooldownUntil = Date.now() + DASH_COOLDOWN;
 
 							// bleed off speed across the jump bonus tiles, like losing momentum
 							if (state.dashJumped && state.dashStepsLeft < DASH_JUMP_BONUS_TILES) {
@@ -450,7 +461,7 @@
 				}
 
 				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
-				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving && !game.player.hover) {
+				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving && !game.player.hover && Date.now() >= state.dashCooldownUntil) {
 					state.dashQueued = false;
 					engageDash();
 				}
