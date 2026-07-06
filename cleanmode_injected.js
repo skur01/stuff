@@ -13,6 +13,7 @@
 	const TURBO_SPEED = 6;
 	const DASH_SPEED = 8;
 	const DASH_TILES = 5;
+	const DASH_SPRAY_DURATION = 750;
 
 	const OPPOSITE_DIRECTION = Object.freeze({ 0: 1, 1: 0, 2: 3, 3: 2 });
 
@@ -44,6 +45,7 @@
 		dashLastY: null,
 		dashVarSeen: 0,
 		dashDeadline: 0,
+		dashQueued: false,
 		prevNoJumping: false,
 		flotomTileX: null,
 		flotomTileY: null,
@@ -243,7 +245,9 @@
 
 		if (state.flotom) state.flotom.createSplash([0, 0, "1995/rippleanim", 3, 100, 1]);
 
-		startSpray();
+		// a short spray burst, cut off quickly so spammed dashes each get their own
+		const sprayAudio = game.sound.play(WATERSPRAY_1, false);
+		if (sprayAudio) INTERVAL.push(setTimeout(() => sprayAudio.stop(), DASH_SPRAY_DURATION));
 	};
 
 	const disengageDash = () => {
@@ -251,8 +255,6 @@
 		game.trigger("var[cleanmode]=0");
 
 		if (state.flotom) state.flotom.destroySplash();
-
-		stopSpray();
 	};
 
 	const startMode = mode => {
@@ -271,6 +273,7 @@
 		if (state.floatEngaged) disengageFloat();
 		if (state.turboEngaged) disengageTurbo();
 		if (state.dashEngaged) disengageDash();
+		state.dashQueued = false;
 		if (state.jumpBlocked) {
 			state.jumpBlocked = false;
 			game.map.noJumping = state.prevNoJumping;
@@ -397,6 +400,13 @@
 			// dash bolts the player forward on a jump press
 			if (state.mode === "dash") {
 				if (state.dashEngaged) {
+					// buffer presses so spamming chains straight into the next dash
+					if (game.input.keyPressed("jump")) state.dashQueued = true;
+
+					if (game.input.keyPressed("action") && !game.player.hover) {
+						game.player.jump(game.map.getVar("jump_height", 8));
+					}
+
 					if (!game.player.moving) {
 						const blocked = game.player.x === state.dashLastX && game.player.y === state.dashLastY;
 
@@ -416,7 +426,11 @@
 
 					// no turning or other input mid dash
 					if (state.dashEngaged) return;
-				} else if (game.input.keyPressed("jump") && game.textbox.active < 0 && game.player.canMove && !game.player.moving) {
+				}
+
+				const dashPressed = game.input.keyPressed("jump") || state.dashQueued;
+				if (dashPressed && game.textbox.active < 0 && game.player.canMove && !game.player.moving) {
+					state.dashQueued = false;
 					engageDash();
 				}
 			}
