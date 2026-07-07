@@ -7,7 +7,7 @@
 
 	const SLOW_STAGE_MS = 10000;
 	const FAST_STAGE_MS = 5000;
-	const SLIDE_DURATION_MS = 600;
+	const SLIDE_DURATION_MS = 1200;
 
 	const STAGES = Object.freeze({ NONE: 0, SLOW: 1, FAST: 2 });
 
@@ -48,16 +48,25 @@
 		const container = document.getElementById("game-container");
 		if (!container) return null;
 
+		// the wrapper clips the slide so the timer emerges from inside the screen edge
+		const wrapper = document.createElement("div");
+		wrapper.id = "sunshine-timer-wrapper";
+		wrapper.style.cssText =
+			"position:absolute;top:0;left:0;width:100%;height:64px;" +
+			"overflow:hidden;pointer-events:none;z-index:5;";
+
 		const element = document.createElement("div");
 		element.id = "sunshine-timer";
 		element.style.cssText =
-			"position:absolute;top:8px;left:50%;z-index:5;" +
+			"position:absolute;top:8px;left:50%;" +
 			"transform:translate(-50%,-250%);" +
 			"transition:transform " + SLIDE_DURATION_MS + "ms cubic-bezier(0.22, 1, 0.36, 1);" +
 			"background:rgba(0,0,0,0.65);color:#ffdd44;" +
 			"font-family:monospace;font-size:22px;font-weight:bold;" +
 			"padding:6px 14px;border-radius:8px;pointer-events:none;";
-		container.appendChild(element);
+
+		wrapper.appendChild(element);
+		container.appendChild(wrapper);
 
 		// force a layout pass so the slide-in transition actually animates
 		element.getBoundingClientRect();
@@ -72,7 +81,10 @@
 		const element = state.element;
 		state.element = null;
 		element.style.transform = "translate(-50%,-250%)";
-		INTERVAL.push(setTimeout(() => element.remove(), SLIDE_DURATION_MS));
+		INTERVAL.push(setTimeout(() => {
+			if (element.parentElement) element.parentElement.remove();
+			else element.remove();
+		}, SLIDE_DURATION_MS));
 	};
 
 	const startTimer = seconds => {
