@@ -8,7 +8,7 @@
 	const SLOW_STAGE_MS = 10000;
 	const FAST_STAGE_MS = 5000;
 	const SLIDE_IN_DURATION_MS = 1200;
-	const SLIDE_OUT_DURATION_MS = 1600;
+	const SLIDE_OUT_DURATION_MS = 1300;
 
 	const STAGES = Object.freeze({ NONE: 0, SLOW: 1, FAST: 2 });
 
@@ -169,7 +169,12 @@
 			stopStageAudio();
 		}
 
-		const pausedNow = (+game.map.getVar("sunshinetimerpause", 0) || 0) === 1;
+		// losing control (trigger freezes, cutscenes, textboxes) halts the clock unless overridden
+		const ignoreFreeze = (+game.map.getVar("sunshinetimerignorefreeze", 0) || 0) === 1;
+		const controlFrozen = !ignoreFreeze &&
+			(game.player.frozen || !game.player.canMove || game.textbox.active > -1);
+
+		const pausedNow = controlFrozen || (+game.map.getVar("sunshinetimerpause", 0) || 0) === 1;
 		if (pausedNow !== state.paused) {
 			state.paused = pausedNow;
 			if (state.stageAudio) {
