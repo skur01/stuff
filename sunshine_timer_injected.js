@@ -7,7 +7,8 @@
 
 	const SLOW_STAGE_MS = 10000;
 	const FAST_STAGE_MS = 5000;
-	const SLIDE_DURATION_MS = 1200;
+	const SLIDE_IN_DURATION_MS = 1200;
+	const SLIDE_OUT_DURATION_MS = 1600;
 
 	const STAGES = Object.freeze({ NONE: 0, SLOW: 1, FAST: 2 });
 
@@ -44,7 +45,7 @@
 		return String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0") + "." + String(millis).padStart(3, "0");
 	};
 
-	const createTimerElement = () => {
+	const createTimerElement = initialText => {
 		const container = document.getElementById("game-container");
 		if (!container) return null;
 
@@ -60,10 +61,13 @@
 		element.style.cssText =
 			"position:absolute;top:8px;left:50%;" +
 			"transform:translate(-50%,-250%);" +
-			"transition:transform " + SLIDE_DURATION_MS + "ms cubic-bezier(0.22, 1, 0.36, 1);" +
+			"transition:transform " + SLIDE_IN_DURATION_MS + "ms cubic-bezier(0.22, 1, 0.36, 1);" +
 			"background:rgba(0,0,0,0.65);color:#ffdd44;" +
 			"font-family:monospace;font-size:22px;font-weight:bold;" +
 			"padding:6px 14px;border-radius:8px;pointer-events:none;";
+
+		// the text must be in place before layout, otherwise the width change mid slide drifts the centering
+		element.textContent = initialText;
 
 		wrapper.appendChild(element);
 		container.appendChild(wrapper);
@@ -80,11 +84,16 @@
 
 		const element = state.element;
 		state.element = null;
+
+		// a small dip first, then accelerating upward, like hopping off a tiny ledge
+		element.style.transition = "transform " + SLIDE_OUT_DURATION_MS + "ms cubic-bezier(0.6, -0.28, 0.735, 0.045)";
+		element.getBoundingClientRect();
 		element.style.transform = "translate(-50%,-250%)";
+
 		INTERVAL.push(setTimeout(() => {
 			if (element.parentElement) element.parentElement.remove();
 			else element.remove();
-		}, SLIDE_DURATION_MS));
+		}, SLIDE_OUT_DURATION_MS));
 	};
 
 	const startTimer = seconds => {
@@ -96,7 +105,7 @@
 		state.varSeen = seconds;
 		state.stage = STAGES.NONE;
 
-		if (!state.element) state.element = createTimerElement();
+		if (!state.element) state.element = createTimerElement(formatTime(state.remaining));
 	};
 
 	const shutdownTimer = () => {
