@@ -66,10 +66,76 @@
 	});
 
 	const PAUSE_MESSAGES = Object.freeze({
-		death: "OUCH!",
-		round: "ROUND CLEAR!",
+		death: "OUCH",
+		round: "ROUND CLEAR",
 		gameover: "GAME OVER"
 	});
+
+	const HUD_FONT = 4;
+	const PACMAN_INTRO_SFX = "db:scl/fi/1qey52snle571ef7zorqc/PacmanIntro.ogg?rlkey=34dawsyx5ykiyp3hobl3friha&st=ktyp9e0s&dl=0";
+
+	const PACMAN_RADIUS = 4;
+	const GHOST_RADIUS = 4;
+	const MOUTH_HALF_ANGLE = 0.65;
+	const FACING_ANGLE = Object.freeze({up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0, none: 0});
+
+	/**
+	 * Builds a list of [dx, dy] whole-pixel offsets forming a filled circle,
+	 * optionally with a mouth wedge cut out, so the sprite can be drawn with
+	 * hard-edged fillRect calls instead of an anti-aliased arc.
+	 */
+	function buildCircleMask(radiusPx, mouthAngle, mouthHalfAngle) {
+		const mask = [];
+
+		for (let dy = -radiusPx; dy <= radiusPx; ++dy) {
+			for (let dx = -radiusPx; dx <= radiusPx; ++dx) {
+				if (Math.hypot(dx, dy) > radiusPx + 0.3) continue;
+
+				if (mouthHalfAngle > 0) {
+					const angle = Math.atan2(dy, dx);
+					const diff = Math.atan2(Math.sin(angle - mouthAngle), Math.cos(angle - mouthAngle));
+					if (Math.abs(diff) < mouthHalfAngle) continue;
+				}
+
+				mask.push([dx, dy]);
+			}
+		}
+
+		return mask;
+	}
+
+	/**
+	 * Builds a blocky ghost silhouette: a domed top over a rectangular skirt
+	 * with a zigzag hem, as a list of whole-pixel [dx, dy] offsets.
+	 */
+	function buildGhostMask(radiusPx) {
+		const mask = [];
+
+		for (let dy = -radiusPx; dy <= radiusPx; ++dy) {
+			for (let dx = -radiusPx; dx <= radiusPx; ++dx) {
+				if (dy <= 0) {
+					if (Math.hypot(dx, dy) > radiusPx + 0.3) continue;
+				} else {
+					if (Math.abs(dx) > radiusPx) continue;
+					if (dy === radiusPx && (dx + radiusPx) % 2 === 0) continue;
+				}
+
+				mask.push([dx, dy]);
+			}
+		}
+
+		return mask;
+	}
+
+	const PACMAN_CLOSED_MASK = buildCircleMask(PACMAN_RADIUS, 0, 0);
+	const PACMAN_OPEN_MASKS = Object.freeze({
+		up: buildCircleMask(PACMAN_RADIUS, FACING_ANGLE.up, MOUTH_HALF_ANGLE),
+		down: buildCircleMask(PACMAN_RADIUS, FACING_ANGLE.down, MOUTH_HALF_ANGLE),
+		left: buildCircleMask(PACMAN_RADIUS, FACING_ANGLE.left, MOUTH_HALF_ANGLE),
+		right: buildCircleMask(PACMAN_RADIUS, FACING_ANGLE.right, MOUTH_HALF_ANGLE),
+		none: PACMAN_CLOSED_MASK
+	});
+	const GHOST_MASK = buildGhostMask(GHOST_RADIUS);
 
 	/**
 	 * Self-contained overlay minigame drawn on the shared HUD canvas.
@@ -88,6 +154,7 @@
 		static FRIGHTENED_DURATION = 7000;
 		static PAUSE_ON_DEATH = 1200;
 		static PAUSE_ON_ROUND_END = 2500;
+		static FADE_DURATION = 500;
 		static DOT_SCORE = 10;
 		static PELLET_SCORE = 50;
 		static GHOST_EAT_SCORE = 200;
@@ -110,6 +177,8 @@
 			this.lastFrameTime = null;
 			this.playerFrozenBeforeStart = true;
 			this.mouthPhase = 0;
+			this.fadeTimer = 0;
+			this.fadeAlpha = 0;
 
 			this.grid = null;
 			this.pacman = null;
@@ -150,6 +219,11 @@
 			this.game.player.canMove = false;
 
 			this.resetBoard();
+
+			this.fadeTimer = 0;
+			this.fadeAlpha = 0;
+
+			this.game.sound.play(PACMAN_INTRO_SFX, false);
 
 			this.active = true;
 			this.lastFrameTime = null;
@@ -220,6 +294,11 @@
 
 		update(dt) {
 			this.mouthPhase += dt;
+
+			if (this.fadeAlpha < 1) {
+				this.fadeTimer += dt;
+				this.fadeAlpha = Math.min(1, this.fadeTimer / PacmanGame.FADE_DURATION);
+			}
 
 			if (this.pauseTimer > 0) {
 				this.pauseTimer -= dt;
@@ -453,6 +532,9 @@
 		render() {
 			const ctx = this.game.hud.ctx;
 
+			ctx.save();
+			ctx.globalAlpha = this.fadeAlpha;
+
 			ctx.fillStyle = "#000000";
 			ctx.fillRect(0, 0, this.game.width, this.game.height);
 
@@ -462,6 +544,8 @@
 			this.drawHudText(ctx);
 
 			if (this.pauseTimer > 0) this.drawPauseMessage(ctx);
+
+			ctx.restore();
 		}
 
 		drawMaze(ctx) {
@@ -472,18 +556,20 @@
 					const y = this.offsetY + row * CELL_SIZE;
 
 					if (cell === "#") {
-						ctx.fillStyle = "#1030a0";
-						ctx.fillRect(x + 1, y + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+						ctx.fillStyle = "#0c2280";
+						ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+						ctx.fillStyle = "#1c40c0";
+						ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
 					} else if (cell === ".") {
 						ctx.fillStyle = "#f0d090";
-						ctx.beginPath();
-						ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, 1.5, 0, Math.PI * 2);
-						ctx.fill();
+						const cx = Math.round(x + CELL_SIZE / 2);
+						const cy = Math.round(y + CELL_SIZE / 2);
+						ctx.fillRect(cx - 1, cy - 1, 2, 2);
 					} else if (cell === "o") {
 						ctx.fillStyle = "#f0d090";
-						ctx.beginPath();
-						ctx.arc(x + CELL_SIZE / 2, y + CELL_SIZE / 2, 3.5, 0, Math.PI * 2);
-						ctx.fill();
+						const cx = Math.round(x + CELL_SIZE / 2);
+						const cy = Math.round(y + CELL_SIZE / 2);
+						if (Math.floor(this.mouthPhase / 250) % 2 === 0) ctx.fillRect(cx - 2, cy - 2, 4, 4);
 					}
 				}
 			}
@@ -491,27 +577,20 @@
 
 		drawPacman(ctx) {
 			const pos = this.getRenderPosition(this.pacman);
-			const x = this.offsetX + (pos.col + 0.5) * CELL_SIZE;
-			const y = this.offsetY + (pos.row + 0.5) * CELL_SIZE;
-			const radius = CELL_SIZE / 2 - 1;
+			const x = Math.round(this.offsetX + (pos.col + 0.5) * CELL_SIZE);
+			const y = Math.round(this.offsetY + (pos.row + 0.5) * CELL_SIZE);
 
-			const angleByDirection = {up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0, none: 0};
-			const facing = angleByDirection[this.pacman.dir];
-			const mouthOpen = Math.abs(Math.sin(this.mouthPhase / 120)) * 0.22;
+			const isChewing = this.pacman.dir !== DIRECTIONS.NONE && Math.floor(this.mouthPhase / 90) % 2 === 0;
+			const mask = isChewing ? PACMAN_OPEN_MASKS[this.pacman.dir] : PACMAN_CLOSED_MASK;
 
 			ctx.fillStyle = "#f0e030";
-			ctx.beginPath();
-			ctx.moveTo(x, y);
-			ctx.arc(x, y, radius, facing + mouthOpen * Math.PI, facing + (2 - mouthOpen) * Math.PI);
-			ctx.closePath();
-			ctx.fill();
+			for (const [dx, dy] of mask) ctx.fillRect(x + dx, y + dy, 1, 1);
 		}
 
 		drawGhost(ctx, ghost) {
 			const pos = this.getRenderPosition(ghost);
-			const x = this.offsetX + (pos.col + 0.5) * CELL_SIZE;
-			const y = this.offsetY + (pos.row + 0.5) * CELL_SIZE;
-			const radius = CELL_SIZE / 2 - 1;
+			const x = Math.round(this.offsetX + (pos.col + 0.5) * CELL_SIZE);
+			const y = Math.round(this.offsetY + (pos.row + 0.5) * CELL_SIZE);
 
 			if (ghost.mode === GHOST_MODES.EATEN) {
 				this.drawGhostEyes(ctx, x, y);
@@ -519,48 +598,32 @@
 			}
 
 			ctx.fillStyle = ghost.mode === GHOST_MODES.FRIGHTENED ? "#2040c0" : ghost.color;
-			ctx.beginPath();
-			ctx.arc(x, y - radius * 0.2, radius, Math.PI, 0);
-			ctx.lineTo(x + radius, y + radius);
-			ctx.lineTo(x + radius * 0.5, y + radius * 0.6);
-			ctx.lineTo(x, y + radius);
-			ctx.lineTo(x - radius * 0.5, y + radius * 0.6);
-			ctx.lineTo(x - radius, y + radius);
-			ctx.closePath();
-			ctx.fill();
+			for (const [dx, dy] of GHOST_MASK) ctx.fillRect(x + dx, y + dy, 1, 1);
 
 			this.drawGhostEyes(ctx, x, y - 1);
 		}
 
 		drawGhostEyes(ctx, x, y) {
 			ctx.fillStyle = "#ffffff";
-			ctx.beginPath();
-			ctx.arc(x - 2, y, 1.3, 0, Math.PI * 2);
-			ctx.arc(x + 2, y, 1.3, 0, Math.PI * 2);
-			ctx.fill();
+			ctx.fillRect(x - 3, y - 1, 2, 2);
+			ctx.fillRect(x + 1, y - 1, 2, 2);
 		}
 
 		drawHudText(ctx) {
-			ctx.fillStyle = "#ffffff";
-			ctx.font = "8px monospace";
-			ctx.textBaseline = "top";
+			const text = this.game.text;
 
-			ctx.textAlign = "left";
-			ctx.fillText("SCORE " + this.score, 4, 4);
+			text.draw(ctx, "SCORE " + this.score, 4, 4, HUD_FONT);
 
-			ctx.textAlign = "right";
-			ctx.fillText("LIVES " + this.lives, this.game.width - 4, 4);
+			const livesStr = "LIVES " + this.lives;
+			const livesWidth = text.getWidth(livesStr, HUD_FONT);
+			text.draw(ctx, livesStr, this.game.width - 4 - livesWidth, 4, HUD_FONT);
 		}
 
 		drawPauseMessage(ctx) {
-			const text = PAUSE_MESSAGES[this.pauseMessage];
-			if (!text) return;
+			const message = PAUSE_MESSAGES[this.pauseMessage];
+			if (!message) return;
 
-			ctx.fillStyle = "#ffffff";
-			ctx.font = "12px monospace";
-			ctx.textAlign = "center";
-			ctx.textBaseline = "middle";
-			ctx.fillText(text, this.game.width / 2, this.game.height / 2);
+			this.game.text.drawCentered(ctx, message, this.game.width / 2, this.game.height / 2 - 4, HUD_FONT);
 		}
 	}
 
