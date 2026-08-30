@@ -90,7 +90,7 @@
 
 	const HUD_FONT = 4;
 	const PACMAN_INTRO_SFX = "db:scl/fi/1qey52snle571ef7zorqc/PacmanIntro.ogg?rlkey=34dawsyx5ykiyp3hobl3friha&st=ktyp9e0s&dl=0";
-	const MOVE_SOUND_URL = "db:scl/fi/j9p56iieb5w4c8ybjjus5/munchlaxChomp.ogg?rlkey=jac1zuv5wyucx92oont8gqlfu&st=g8di96v6&dl=0";
+	const MOVE_SOUND_URL = "https://www.dl.dropboxusercontent.com/scl/fi/j9p56iieb5w4c8ybjjus5/munchlaxChomp.ogg?rlkey=jac1zuv5wyucx92oont8gqlfu&st=g8di96v6&dl=0";
 
 	const PACMAN_RADIUS = 5;
 	const GHOST_RADIUS = 5;
@@ -214,29 +214,53 @@
 			this.dotsRemaining = 0;
 			this.frightenedTimer = 0;
 
-			// Kick off a silent, looping copy right away so the sound is fully
-			// loaded and already playing by the time it's first needed; only
-			// its volume gets toggled later to make it audible while moving.
-			// The weather flag (not loop) is used so this doesn't hijack the
-			// single background-music slot on game.sound.
-			this.moveSoundKey = this.game.sound.parseParams(MOVE_SOUND_URL).filename;
-			console.log("[pacman audio] resolved url:", this.moveSoundKey);
+			// The <audio> element pathway (game.sound.play) hands this file to
+			// Chrome's FFmpeg demuxer, which rejects it outright with
+			// DEMUXER_ERROR_COULD_NOT_PARSE / "PTS is not defined" - a container
+			// defect in the source file itself, not something fixable from JS
+			// on that path. Web Audio's decodeAudioData is a different decoder
+			// (the same one the engine's own playCry uses) and may tolerate it.
+			this.moveGain = null;
+			this.moveSoundPlaying = false;
+			this.setupMoveSound();
+		}
 
-			const preloadAudio = this.game.sound.play(MOVE_SOUND_URL, false, null, 0, true);
-			console.log("[pacman audio] play() returned:", preloadAudio);
-
-			if (preloadAudio) {
-				console.log("[pacman audio] initial state readyState:", preloadAudio.readyState, "networkState:", preloadAudio.networkState, "paused:", preloadAudio.paused, "currentSrc:", preloadAudio.currentSrc);
-				preloadAudio.addEventListener("error", () => console.error("[pacman audio] error event, code:", preloadAudio.error && preloadAudio.error.code, "src:", preloadAudio.currentSrc));
-				preloadAudio.addEventListener("canplaythrough", () => console.log("[pacman audio] canplaythrough fired"));
-				preloadAudio.addEventListener("play", () => console.log("[pacman audio] play event fired"));
-				preloadAudio.addEventListener("pause", () => console.log("[pacman audio] pause event fired"));
-				preloadAudio.addEventListener("stalled", () => console.warn("[pacman audio] stalled event fired"));
-			} else {
-				console.error("[pacman audio] game.sound.play() returned nothing on preload");
+		setupMoveSound() {
+			const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+			if (!AudioContextClass) {
+				console.error("[pacman audio] no AudioContext available in this browser");
+				return;
 			}
 
-			this.moveSoundPlaying = false;
+			if (!this.game.sound.audioContext) this.game.sound.audioContext = new AudioContextClass();
+			const ctx = this.game.sound.audioContext;
+			console.log("[pacman audio] AudioContext state:", ctx.state);
+
+			fetch(MOVE_SOUND_URL)
+				.then(response => {
+					console.log("[pacman audio] fetch ok:", response.ok, "status:", response.status, "type:", response.type);
+					return response.arrayBuffer();
+				})
+				.then(arrayBuffer => {
+					console.log("[pacman audio] arrayBuffer bytes:", arrayBuffer.byteLength);
+					return ctx.decodeAudioData(arrayBuffer);
+				})
+				.then(decodedBuffer => {
+					console.log("[pacman audio] decodeAudioData succeeded, duration:", decodedBuffer.duration);
+
+					this.moveGain = ctx.createGain();
+					this.moveGain.gain.value = 0;
+					this.moveGain.connect(ctx.destination);
+
+					const source = ctx.createBufferSource();
+					source.buffer = decodedBuffer;
+					source.loop = true;
+					source.connect(this.moveGain);
+					source.start(0);
+
+					console.log("[pacman audio] source started, looping silently until moved");
+				})
+				.catch(err => console.error("[pacman audio] WebAudio fetch/decode failed:", err));
 		}
 
 		draw() {
@@ -428,21 +452,22 @@
 
 			this.moveSoundPlaying = isMoving;
 			console.log("[pacman audio] toggle, isMoving:", isMoving, "phase:", this.phase, "dir:", this.pacman.dir);
+
+			if (isMoving && this.game.sound.audioContext && this.game.sound.audioContext.state === "suspended") {
+				this.game.sound.audioContext.resume().then(() => console.log("[pacman audio] AudioContext resumed"));
+			}
+
 			this.setMoveSoundVolume(isMoving ? (this.game.settings.sfxVolume || 0) / 100 : 0);
 		}
 
 		setMoveSoundVolume(volume) {
-			const audio = this.game.sound.sounds[this.moveSoundKey];
-
-			if (!audio) {
-				console.error("[pacman audio] no cached audio found under key:", this.moveSoundKey, "known keys:", Object.keys(this.game.sound.sounds));
+			if (!this.moveGain) {
+				console.warn("[pacman audio] gain node not ready yet, wanted volume", volume);
 				return;
 			}
 
-			audio.targetVolume = volume;
-			audio.volume = volume;
-
-			console.log("[pacman audio] set volume to", volume, "actual now:", audio.volume, "paused:", audio.paused, "readyState:", audio.readyState, "error:", audio.error);
+			this.moveGain.gain.value = volume;
+			console.log("[pacman audio] gain set to", volume, "context state:", this.game.sound.audioContext.state);
 		}
 
 		endFrightened() {
