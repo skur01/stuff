@@ -220,7 +220,22 @@
 			// The weather flag (not loop) is used so this doesn't hijack the
 			// single background-music slot on game.sound.
 			this.moveSoundKey = this.game.sound.parseParams(MOVE_SOUND_URL).filename;
-			this.game.sound.play(MOVE_SOUND_URL, false, null, 0, true);
+			console.log("[pacman audio] resolved url:", this.moveSoundKey);
+
+			const preloadAudio = this.game.sound.play(MOVE_SOUND_URL, false, null, 0, true);
+			console.log("[pacman audio] play() returned:", preloadAudio);
+
+			if (preloadAudio) {
+				console.log("[pacman audio] initial state readyState:", preloadAudio.readyState, "networkState:", preloadAudio.networkState, "paused:", preloadAudio.paused, "currentSrc:", preloadAudio.currentSrc);
+				preloadAudio.addEventListener("error", () => console.error("[pacman audio] error event, code:", preloadAudio.error && preloadAudio.error.code, "src:", preloadAudio.currentSrc));
+				preloadAudio.addEventListener("canplaythrough", () => console.log("[pacman audio] canplaythrough fired"));
+				preloadAudio.addEventListener("play", () => console.log("[pacman audio] play event fired"));
+				preloadAudio.addEventListener("pause", () => console.log("[pacman audio] pause event fired"));
+				preloadAudio.addEventListener("stalled", () => console.warn("[pacman audio] stalled event fired"));
+			} else {
+				console.error("[pacman audio] game.sound.play() returned nothing on preload");
+			}
+
 			this.moveSoundPlaying = false;
 		}
 
@@ -412,15 +427,22 @@
 			if (isMoving === this.moveSoundPlaying) return;
 
 			this.moveSoundPlaying = isMoving;
+			console.log("[pacman audio] toggle, isMoving:", isMoving, "phase:", this.phase, "dir:", this.pacman.dir);
 			this.setMoveSoundVolume(isMoving ? (this.game.settings.sfxVolume || 0) / 100 : 0);
 		}
 
 		setMoveSoundVolume(volume) {
 			const audio = this.game.sound.sounds[this.moveSoundKey];
-			if (!audio) return;
+
+			if (!audio) {
+				console.error("[pacman audio] no cached audio found under key:", this.moveSoundKey, "known keys:", Object.keys(this.game.sound.sounds));
+				return;
+			}
 
 			audio.targetVolume = volume;
 			audio.volume = volume;
+
+			console.log("[pacman audio] set volume to", volume, "actual now:", audio.volume, "paused:", audio.paused, "readyState:", audio.readyState, "error:", audio.error);
 		}
 
 		endFrightened() {
