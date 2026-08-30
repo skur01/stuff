@@ -90,7 +90,7 @@
 
 	const HUD_FONT = 4;
 	const PACMAN_INTRO_SFX = "db:scl/fi/1qey52snle571ef7zorqc/PacmanIntro.ogg?rlkey=34dawsyx5ykiyp3hobl3friha&st=ktyp9e0s&dl=0";
-	const MOVE_SOUND_URL = "https://www.dl.dropboxusercontent.com/scl/fi/j9p56iieb5w4c8ybjjus5/munchlaxChomp.ogg?rlkey=jac1zuv5wyucx92oont8gqlfu&st=g8di96v6&dl=0";
+	const MOVE_SOUND_URL = "db:scl/fi/j9p56iieb5w4c8ybjjus5/munchlaxChomp.ogg?rlkey=jac1zuv5wyucx92oont8gqlfu&st=g8di96v6&dl=0";
 
 	const PACMAN_RADIUS = 5;
 	const GHOST_RADIUS = 5;
@@ -213,13 +213,14 @@
 			this.lives = PacmanGame.STARTING_LIVES;
 			this.dotsRemaining = 0;
 			this.frightenedTimer = 0;
-			this.spawnSealed = false;
 
-			// Preloaded up front so there's no stutter the first time the player moves.
-			this.moveSound = new Audio(MOVE_SOUND_URL);
-			this.moveSound.loop = true;
-			this.moveSound.preload = "auto";
-			this.moveSound.load();
+			// Kick off a silent, looping copy right away so the sound is fully
+			// loaded and already playing by the time it's first needed; only
+			// its volume gets toggled later to make it audible while moving.
+			// The weather flag (not loop) is used so this doesn't hijack the
+			// single background-music slot on game.sound.
+			this.moveSoundKey = this.game.sound.parseParams(MOVE_SOUND_URL).filename;
+			this.game.sound.play(MOVE_SOUND_URL, false, null, 0, true);
 			this.moveSoundPlaying = false;
 		}
 
@@ -263,7 +264,7 @@
 			this.active = false;
 			this.quitting = false;
 
-			this.moveSound.pause();
+			this.setMoveSoundVolume(0);
 			this.moveSoundPlaying = false;
 		}
 
@@ -328,7 +329,6 @@
 				nextDir: DIRECTIONS.NONE
 			};
 
-			this.spawnSealed = false;
 			this.frightenedTimer = 0;
 
 			for (const ghost of this.ghosts) {
@@ -392,12 +392,8 @@
 			}
 
 			this.readInput();
-			this.moveEntity(this.pacman, PacmanGame.PACMAN_SPEED * dt / 1000, entity => entity.nextDir, (col, row, dir) => this.isPlayerWalkable(col, row, dir));
+			this.moveEntity(this.pacman, PacmanGame.PACMAN_SPEED * dt / 1000, entity => entity.nextDir);
 			this.updateMoveSound();
-
-			if (!this.spawnSealed && (this.pacman.col !== PacmanGame.SPAWN_COL || this.pacman.row !== PacmanGame.SPAWN_ROW)) {
-				this.spawnSealed = true;
-			}
 
 			for (const ghost of this.ghosts) this.updateGhost(ghost, dt);
 
@@ -406,8 +402,9 @@
 		}
 
 		/**
-		 * Starts or stops the looping movement sound to match whether Pac-Man
-		 * is actually walking right now (only true mid-round, never during
+		 * The movement sound is kept looping in the background the whole
+		 * time the minigame is active; only its volume is toggled to match
+		 * whether Pac-Man is actually walking right now (never during
 		 * intros, pauses, or the death animation).
 		 */
 		updateMoveSound() {
@@ -415,14 +412,15 @@
 			if (isMoving === this.moveSoundPlaying) return;
 
 			this.moveSoundPlaying = isMoving;
+			this.setMoveSoundVolume(isMoving ? (this.game.settings.sfxVolume || 0) / 100 : 0);
+		}
 
-			if (isMoving) {
-				this.moveSound.volume = (this.game.settings.sfxVolume || 0) / 100;
-				this.moveSound.currentTime = 0;
-				this.moveSound.play().catch(() => {});
-			} else {
-				this.moveSound.pause();
-			}
+		setMoveSoundVolume(volume) {
+			const audio = this.game.sound.sounds[this.moveSoundKey];
+			if (!audio) return;
+
+			audio.targetVolume = volume;
+			audio.volume = volume;
 		}
 
 		endFrightened() {
@@ -449,22 +447,6 @@
 			return this.grid[targetRow][targetCol] !== "#";
 		}
 
-		/**
-		 * Same as isWalkable, but additionally seals the player's own spawn
-		 * tile off once they have stepped away from it, so it can't be
-		 * walked back into.
-		 */
-		isPlayerWalkable(col, row, dir) {
-			if (!this.isWalkable(col, row, dir)) return false;
-			if (!this.spawnSealed) return true;
-
-			const vector = DIRECTION_VECTORS[dir];
-			const targetRow = row + vector.dy;
-			const targetCol = this.wrapCol(col + vector.dx);
-
-			return !(targetCol === PacmanGame.SPAWN_COL && targetRow === PacmanGame.SPAWN_ROW);
-		}
-
 		wrapCol(col) {
 			if (col < 0) return PacmanGame.GRID_WIDTH - 1;
 			if (col >= PacmanGame.GRID_WIDTH) return 0;
@@ -475,7 +457,7 @@
 		 * Advances an entity along the grid by `distance` cells, only allowing
 		 * direction changes at cell centers (progress === 0), same as classic
 		 * tile-based Pac-Man movement. `isWalkableFn` defaults to the shared
-		 * grid check but can be overridden per entity (see isPlayerWalkable).
+		 * grid check but can be overridden per entity if a caller needs one.
 		 */
 		moveEntity(entity, distance, getDesiredDirection, isWalkableFn) {
 			if (!isWalkableFn) isWalkableFn = (col, row, dir) => this.isWalkable(col, row, dir);
