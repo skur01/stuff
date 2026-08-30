@@ -2,7 +2,7 @@
 
 	if (!game.hud) return;
 
-	const CELL_SIZE = 11;
+	const CELL_SIZE = 12;
 
 	const MAZE_TEMPLATE = [
 		"#####################",
@@ -52,6 +52,8 @@
 		none: "none"
 	});
 
+	const ALL_DIRECTIONS = [DIRECTIONS.UP, DIRECTIONS.DOWN, DIRECTIONS.LEFT, DIRECTIONS.RIGHT];
+
 	const GHOST_MODES = Object.freeze({
 		CHASE: "chase",
 		FRIGHTENED: "frightened",
@@ -65,17 +67,30 @@
 		SHY: "shy"
 	});
 
-	const PAUSE_MESSAGES = Object.freeze({
-		death: "OUCH",
-		round: "ROUND CLEAR",
-		gameover: "GAME OVER"
+	const PHASES = Object.freeze({
+		FADE_TO_BLACK: "fade_to_black",
+		FADE_IN: "fade_in",
+		GET_READY: "get_ready",
+		PLAYING: "playing",
+		DEATH_PAUSE: "death_pause",
+		ROUND_CLEAR_PAUSE: "round_clear_pause",
+		GAME_OVER_PAUSE: "game_over_pause",
+		FADE_OUT: "fade_out",
+		BLACK_FADE_OUT: "black_fade_out"
+	});
+
+	const PHASE_MESSAGES = Object.freeze({
+		get_ready: "GET READY",
+		death_pause: "OUCH",
+		round_clear_pause: "ROUND CLEAR",
+		game_over_pause: "GAME OVER"
 	});
 
 	const HUD_FONT = 4;
 	const PACMAN_INTRO_SFX = "db:scl/fi/1qey52snle571ef7zorqc/PacmanIntro.ogg?rlkey=34dawsyx5ykiyp3hobl3friha&st=ktyp9e0s&dl=0";
 
-	const PACMAN_RADIUS = 4;
-	const GHOST_RADIUS = 4;
+	const PACMAN_RADIUS = 5;
+	const GHOST_RADIUS = 5;
 	const MOUTH_HALF_ANGLE = 0.65;
 	const FACING_ANGLE = Object.freeze({up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0, none: 0});
 
@@ -152,9 +167,12 @@
 		static GHOST_FRIGHTENED_SPEED = 2.5;
 		static GHOST_EATEN_SPEED = 10;
 		static FRIGHTENED_DURATION = 7000;
-		static PAUSE_ON_DEATH = 1200;
-		static PAUSE_ON_ROUND_END = 2500;
-		static FADE_DURATION = 500;
+		static BLACK_FADE_DURATION = 250;
+		static CONTENT_FADE_DURATION = 400;
+		static GET_READY_DURATION = 3000;
+		static DEATH_PAUSE_DURATION = 1200;
+		static ROUND_CLEAR_PAUSE_DURATION = 2000;
+		static GAME_OVER_PAUSE_DURATION = 2000;
 		static DOT_SCORE = 10;
 		static PELLET_SCORE = 50;
 		static GHOST_EAT_SCORE = 200;
@@ -174,11 +192,13 @@
 			this.offsetY = Math.round((game.height - this.pixelHeight) / 2);
 
 			this.active = false;
+			this.quitting = false;
 			this.lastFrameTime = null;
 			this.playerFrozenBeforeStart = true;
 			this.mouthPhase = 0;
-			this.fadeTimer = 0;
-			this.fadeAlpha = 0;
+
+			this.phase = PHASES.FADE_TO_BLACK;
+			this.phaseElapsed = 0;
 
 			this.grid = null;
 			this.pacman = null;
@@ -187,8 +207,7 @@
 			this.lives = PacmanGame.STARTING_LIVES;
 			this.dotsRemaining = 0;
 			this.frightenedTimer = 0;
-			this.pauseTimer = 0;
-			this.pauseMessage = "";
+			this.spawnSealed = false;
 		}
 
 		draw() {
@@ -198,7 +217,7 @@
 			const wantsActive = mapVars.pacman === 1;
 
 			if (wantsActive && !this.active) this.start();
-			else if (!wantsActive && this.active) this.stop();
+			else if (!wantsActive && this.active && !this.quitting) this.stop();
 
 			if (!this.active) {
 				this.lastFrameTime = null;
@@ -218,12 +237,9 @@
 			this.playerFrozenBeforeStart = this.game.player.canMove;
 			this.game.player.canMove = false;
 
+			this.quitting = false;
 			this.resetBoard();
-
-			this.fadeTimer = 0;
-			this.fadeAlpha = 0;
-
-			this.game.sound.play(PACMAN_INTRO_SFX, false);
+			this.setPhase(PHASES.FADE_TO_BLACK);
 
 			this.active = true;
 			this.lastFrameTime = null;
@@ -232,23 +248,19 @@
 		stop() {
 			this.game.player.canMove = this.playerFrozenBeforeStart;
 			this.active = false;
+			this.quitting = false;
+		}
+
+		setPhase(phase) {
+			this.phase = phase;
+			this.phaseElapsed = 0;
+
+			if (phase === PHASES.GET_READY) this.game.sound.play(PACMAN_INTRO_SFX, false);
 		}
 
 		resetBoard() {
-			this.grid = MAZE_TEMPLATE.map(row => row.split(""));
-
-			this.dotsRemaining = 0;
-			for (const row of this.grid) {
-				for (const cell of row) {
-					if (cell === "." || cell === "o") ++this.dotsRemaining;
-				}
-			}
-
 			this.score = 0;
 			this.lives = PacmanGame.STARTING_LIVES;
-			this.frightenedTimer = 0;
-			this.pauseTimer = 0;
-			this.pauseMessage = "";
 
 			this.ghosts = [
 				this.createGhost(10, 9, GHOST_ROLES.CHASER, "#f03030"),
@@ -257,7 +269,24 @@
 				this.createGhost(10, 11, GHOST_ROLES.SHY, "#f0a030")
 			];
 
+			this.refillGrid();
 			this.resetPositions();
+		}
+
+		startNewRound() {
+			this.refillGrid();
+			this.resetPositions();
+		}
+
+		refillGrid() {
+			this.grid = MAZE_TEMPLATE.map(row => row.split(""));
+
+			this.dotsRemaining = 0;
+			for (const row of this.grid) {
+				for (const cell of row) {
+					if (cell === "." || cell === "o") ++this.dotsRemaining;
+				}
+			}
 		}
 
 		createGhost(col, row, role, color) {
@@ -283,6 +312,9 @@
 				nextDir: DIRECTIONS.NONE
 			};
 
+			this.spawnSealed = false;
+			this.frightenedTimer = 0;
+
 			for (const ghost of this.ghosts) {
 				ghost.col = ghost.homeCol;
 				ghost.row = ghost.homeRow;
@@ -294,15 +326,39 @@
 
 		update(dt) {
 			this.mouthPhase += dt;
+			this.phaseElapsed += dt;
 
-			if (this.fadeAlpha < 1) {
-				this.fadeTimer += dt;
-				this.fadeAlpha = Math.min(1, this.fadeTimer / PacmanGame.FADE_DURATION);
-			}
-
-			if (this.pauseTimer > 0) {
-				this.pauseTimer -= dt;
-				if (this.pauseTimer <= 0) this.resolvePause();
+			switch (this.phase) {
+			case PHASES.FADE_TO_BLACK:
+				if (this.phaseElapsed >= PacmanGame.BLACK_FADE_DURATION) this.setPhase(PHASES.FADE_IN);
+				return;
+			case PHASES.FADE_IN:
+				if (this.phaseElapsed >= PacmanGame.CONTENT_FADE_DURATION) this.setPhase(PHASES.GET_READY);
+				return;
+			case PHASES.GET_READY:
+				if (this.phaseElapsed >= PacmanGame.GET_READY_DURATION) this.setPhase(PHASES.PLAYING);
+				return;
+			case PHASES.DEATH_PAUSE:
+				if (this.phaseElapsed >= PacmanGame.DEATH_PAUSE_DURATION) this.setPhase(PHASES.PLAYING);
+				return;
+			case PHASES.ROUND_CLEAR_PAUSE:
+				if (this.phaseElapsed >= PacmanGame.ROUND_CLEAR_PAUSE_DURATION) {
+					this.startNewRound();
+					this.setPhase(PHASES.GET_READY);
+				}
+				return;
+			case PHASES.GAME_OVER_PAUSE:
+				if (this.phaseElapsed >= PacmanGame.GAME_OVER_PAUSE_DURATION) {
+					this.quitting = true;
+					this.game.trigger("mapvar[pacman]=0");
+					this.setPhase(PHASES.FADE_OUT);
+				}
+				return;
+			case PHASES.FADE_OUT:
+				if (this.phaseElapsed >= PacmanGame.CONTENT_FADE_DURATION) this.setPhase(PHASES.BLACK_FADE_OUT);
+				return;
+			case PHASES.BLACK_FADE_OUT:
+				if (this.phaseElapsed >= PacmanGame.BLACK_FADE_DURATION) this.stop();
 				return;
 			}
 
@@ -312,18 +368,16 @@
 			}
 
 			this.readInput();
-			this.moveEntity(this.pacman, PacmanGame.PACMAN_SPEED * dt / 1000, entity => entity.nextDir);
+			this.moveEntity(this.pacman, PacmanGame.PACMAN_SPEED * dt / 1000, entity => entity.nextDir, (col, row, dir) => this.isPlayerWalkable(col, row, dir));
+
+			if (!this.spawnSealed && (this.pacman.col !== PacmanGame.SPAWN_COL || this.pacman.row !== PacmanGame.SPAWN_ROW)) {
+				this.spawnSealed = true;
+			}
 
 			for (const ghost of this.ghosts) this.updateGhost(ghost, dt);
 
 			this.handleDotEating();
 			this.handleGhostCollisions();
-		}
-
-		resolvePause() {
-			const wasRoundOrGameOver = this.pauseMessage === "round" || this.pauseMessage === "gameover";
-			this.pauseMessage = "";
-			if (wasRoundOrGameOver) this.resetBoard();
 		}
 
 		endFrightened() {
@@ -341,12 +395,46 @@
 			else if (input.keyHeld("right")) this.pacman.nextDir = DIRECTIONS.RIGHT;
 		}
 
+		isWalkable(col, row, dir) {
+			const vector = DIRECTION_VECTORS[dir];
+			const targetRow = row + vector.dy;
+			if (targetRow < 0 || targetRow >= PacmanGame.GRID_HEIGHT) return false;
+
+			const targetCol = this.wrapCol(col + vector.dx);
+			return this.grid[targetRow][targetCol] !== "#";
+		}
+
+		/**
+		 * Same as isWalkable, but additionally seals the player's own spawn
+		 * tile off once they have stepped away from it, so it can't be
+		 * walked back into.
+		 */
+		isPlayerWalkable(col, row, dir) {
+			if (!this.isWalkable(col, row, dir)) return false;
+			if (!this.spawnSealed) return true;
+
+			const vector = DIRECTION_VECTORS[dir];
+			const targetRow = row + vector.dy;
+			const targetCol = this.wrapCol(col + vector.dx);
+
+			return !(targetCol === PacmanGame.SPAWN_COL && targetRow === PacmanGame.SPAWN_ROW);
+		}
+
+		wrapCol(col) {
+			if (col < 0) return PacmanGame.GRID_WIDTH - 1;
+			if (col >= PacmanGame.GRID_WIDTH) return 0;
+			return col;
+		}
+
 		/**
 		 * Advances an entity along the grid by `distance` cells, only allowing
 		 * direction changes at cell centers (progress === 0), same as classic
-		 * tile-based Pac-Man movement.
+		 * tile-based Pac-Man movement. `isWalkableFn` defaults to the shared
+		 * grid check but can be overridden per entity (see isPlayerWalkable).
 		 */
-		moveEntity(entity, distance, getDesiredDirection) {
+		moveEntity(entity, distance, getDesiredDirection, isWalkableFn) {
+			if (!isWalkableFn) isWalkableFn = (col, row, dir) => this.isWalkable(col, row, dir);
+
 			let remaining = distance;
 			let guard = 0;
 
@@ -355,9 +443,9 @@
 
 				if (entity.progress === 0) {
 					const desired = getDesiredDirection(entity);
-					if (desired !== DIRECTIONS.NONE && this.isWalkable(entity.col, entity.row, desired)) {
+					if (desired !== DIRECTIONS.NONE && isWalkableFn(entity.col, entity.row, desired)) {
 						entity.dir = desired;
-					} else if (!this.isWalkable(entity.col, entity.row, entity.dir)) {
+					} else if (!isWalkableFn(entity.col, entity.row, entity.dir)) {
 						entity.dir = DIRECTIONS.NONE;
 					}
 				}
@@ -378,33 +466,23 @@
 			}
 		}
 
-		isWalkable(col, row, dir) {
-			const vector = DIRECTION_VECTORS[dir];
-			const targetRow = row + vector.dy;
-			if (targetRow < 0 || targetRow >= PacmanGame.GRID_HEIGHT) return false;
-
-			const targetCol = this.wrapCol(col + vector.dx);
-			return this.grid[targetRow][targetCol] !== "#";
-		}
-
-		wrapCol(col) {
-			if (col < 0) return PacmanGame.GRID_WIDTH - 1;
-			if (col >= PacmanGame.GRID_WIDTH) return 0;
-			return col;
-		}
-
 		updateGhost(ghost, dt) {
 			let speed = PacmanGame.GHOST_CHASE_SPEED;
 			if (ghost.mode === GHOST_MODES.FRIGHTENED) speed = PacmanGame.GHOST_FRIGHTENED_SPEED;
 			else if (ghost.mode === GHOST_MODES.EATEN) speed = PacmanGame.GHOST_EATEN_SPEED;
 
 			this.moveEntity(ghost, speed * dt / 1000, g => this.chooseGhostDirection(g));
-
-			const atBoxCenter = ghost.col === PacmanGame.BOX_COL && ghost.row === PacmanGame.BOX_ROW && ghost.progress === 0;
-			if (ghost.mode === GHOST_MODES.EATEN && atBoxCenter) ghost.mode = GHOST_MODES.CHASE;
 		}
 
 		chooseGhostDirection(ghost) {
+			if (ghost.mode === GHOST_MODES.EATEN) {
+				if (ghost.col === PacmanGame.BOX_COL && ghost.row === PacmanGame.BOX_ROW) {
+					ghost.mode = GHOST_MODES.CHASE;
+				} else {
+					return this.findShortestDirection(ghost.col, ghost.row, PacmanGame.BOX_COL, PacmanGame.BOX_ROW, ghost.dir);
+				}
+			}
+
 			const options = this.getOpenDirections(ghost);
 			if (options.length === 0) return OPPOSITE_DIRECTION[ghost.dir];
 
@@ -417,11 +495,10 @@
 		}
 
 		getOpenDirections(ghost) {
-			const all = [DIRECTIONS.UP, DIRECTIONS.DOWN, DIRECTIONS.LEFT, DIRECTIONS.RIGHT];
-			const forward = all.filter(dir => dir !== OPPOSITE_DIRECTION[ghost.dir] && this.isWalkable(ghost.col, ghost.row, dir));
+			const forward = ALL_DIRECTIONS.filter(dir => dir !== OPPOSITE_DIRECTION[ghost.dir] && this.isWalkable(ghost.col, ghost.row, dir));
 			if (forward.length > 0) return forward;
 
-			return all.filter(dir => this.isWalkable(ghost.col, ghost.row, dir));
+			return ALL_DIRECTIONS.filter(dir => this.isWalkable(ghost.col, ghost.row, dir));
 		}
 
 		closestDirection(ghost, options, target) {
@@ -443,9 +520,45 @@
 			return bestDir;
 		}
 
-		getGhostTarget(ghost) {
-			if (ghost.mode === GHOST_MODES.EATEN) return {col: PacmanGame.BOX_COL, row: PacmanGame.BOX_ROW};
+		/**
+		 * Breadth-first search over the grid graph, returning the first-step
+		 * direction along the true shortest path from (fromCol, fromRow) to
+		 * (targetCol, targetRow). Used for eaten ghosts returning to the box
+		 * so they always actually arrive, instead of the straight-line
+		 * distance heuristic getting stuck on a wall detour.
+		 */
+		findShortestDirection(fromCol, fromRow, targetCol, targetRow, fallbackDir) {
+			if (fromCol === targetCol && fromRow === targetRow) return fallbackDir;
 
+			const visited = new Set([fromRow + "," + fromCol]);
+			const queue = [{col: fromCol, row: fromRow, firstDir: null}];
+			let head = 0;
+
+			while (head < queue.length) {
+				const current = queue[head++];
+
+				for (const dir of ALL_DIRECTIONS) {
+					if (!this.isWalkable(current.col, current.row, dir)) continue;
+
+					const vector = DIRECTION_VECTORS[dir];
+					const nextCol = this.wrapCol(current.col + vector.dx);
+					const nextRow = current.row + vector.dy;
+					const key = nextRow + "," + nextCol;
+					if (visited.has(key)) continue;
+
+					visited.add(key);
+					const firstDir = current.firstDir || dir;
+
+					if (nextCol === targetCol && nextRow === targetRow) return firstDir;
+
+					queue.push({col: nextCol, row: nextRow, firstDir});
+				}
+			}
+
+			return fallbackDir;
+		}
+
+		getGhostTarget(ghost) {
 			const pacman = this.pacman;
 
 			if (ghost.role === GHOST_ROLES.AMBUSHER) {
@@ -460,6 +573,23 @@
 			}
 
 			return {col: pacman.col, row: pacman.row};
+		}
+
+		/**
+		 * Reverses a ghost's direction of travel in place, remapping its
+		 * (col, row, progress) so its rendered position doesn't jump: a
+		 * ghost mid-transit toward a cell is repositioned to be mid-transit
+		 * back from that same cell, at the equivalent remaining fraction.
+		 */
+		reverseGhost(ghost) {
+			if (ghost.progress > 0) {
+				const vector = DIRECTION_VECTORS[ghost.dir];
+				ghost.col = this.wrapCol(ghost.col + vector.dx);
+				ghost.row += vector.dy;
+				ghost.progress = 1 - ghost.progress;
+			}
+
+			ghost.dir = OPPOSITE_DIRECTION[ghost.dir];
 		}
 
 		handleDotEating() {
@@ -477,14 +607,11 @@
 				for (const ghost of this.ghosts) {
 					if (ghost.mode === GHOST_MODES.EATEN) continue;
 					ghost.mode = GHOST_MODES.FRIGHTENED;
-					ghost.dir = OPPOSITE_DIRECTION[ghost.dir];
+					this.reverseGhost(ghost);
 				}
 			}
 
-			if (this.dotsRemaining <= 0) {
-				this.pauseMessage = "round";
-				this.pauseTimer = PacmanGame.PAUSE_ON_ROUND_END;
-			}
+			if (this.dotsRemaining <= 0) this.setPhase(PHASES.ROUND_CLEAR_PAUSE);
 		}
 
 		getRenderPosition(entity) {
@@ -519,31 +646,57 @@
 			--this.lives;
 
 			if (this.lives <= 0) {
-				this.pauseMessage = "gameover";
+				this.setPhase(PHASES.GAME_OVER_PAUSE);
 			} else {
-				this.pauseMessage = "death";
+				this.resetPositions();
+				this.setPhase(PHASES.DEATH_PAUSE);
+			}
+		}
+
+		computeAlphas() {
+			let blackAlpha = 1;
+			let contentAlpha = 1;
+
+			if (this.phase === PHASES.FADE_TO_BLACK) {
+				blackAlpha = this.phaseElapsed / PacmanGame.BLACK_FADE_DURATION;
+				contentAlpha = 0;
+			} else if (this.phase === PHASES.FADE_IN) {
+				contentAlpha = this.phaseElapsed / PacmanGame.CONTENT_FADE_DURATION;
+			} else if (this.phase === PHASES.FADE_OUT) {
+				contentAlpha = 1 - this.phaseElapsed / PacmanGame.CONTENT_FADE_DURATION;
+			} else if (this.phase === PHASES.BLACK_FADE_OUT) {
+				blackAlpha = 1 - this.phaseElapsed / PacmanGame.BLACK_FADE_DURATION;
+				contentAlpha = 0;
 			}
 
-			this.pauseTimer = this.lives <= 0 ? PacmanGame.PAUSE_ON_ROUND_END : PacmanGame.PAUSE_ON_DEATH;
-
-			this.resetPositions();
+			return {
+				black: Math.min(1, Math.max(0, blackAlpha)),
+				content: Math.min(1, Math.max(0, contentAlpha))
+			};
 		}
 
 		render() {
 			const ctx = this.game.hud.ctx;
+			const alphas = this.computeAlphas();
 
 			ctx.save();
-			ctx.globalAlpha = this.fadeAlpha;
-
+			ctx.globalAlpha = alphas.black;
 			ctx.fillStyle = "#000000";
 			ctx.fillRect(0, 0, this.game.width, this.game.height);
+			ctx.restore();
+
+			if (alphas.content <= 0) return;
+
+			ctx.save();
+			ctx.globalAlpha = alphas.content;
 
 			this.drawMaze(ctx);
 			for (const ghost of this.ghosts) this.drawGhost(ctx, ghost);
 			this.drawPacman(ctx);
 			this.drawHudText(ctx);
 
-			if (this.pauseTimer > 0) this.drawPauseMessage(ctx);
+			const message = PHASE_MESSAGES[this.phase];
+			if (message) this.drawCenteredMessage(ctx, message);
 
 			ctx.restore();
 		}
@@ -562,14 +715,10 @@
 						ctx.fillRect(x + 2, y + 2, CELL_SIZE - 4, CELL_SIZE - 4);
 					} else if (cell === ".") {
 						ctx.fillStyle = "#f0d090";
-						const cx = Math.round(x + CELL_SIZE / 2);
-						const cy = Math.round(y + CELL_SIZE / 2);
-						ctx.fillRect(cx - 1, cy - 1, 2, 2);
+						ctx.fillRect(x + CELL_SIZE / 2 - 1, y + CELL_SIZE / 2 - 1, 2, 2);
 					} else if (cell === "o") {
 						ctx.fillStyle = "#f0d090";
-						const cx = Math.round(x + CELL_SIZE / 2);
-						const cy = Math.round(y + CELL_SIZE / 2);
-						if (Math.floor(this.mouthPhase / 250) % 2 === 0) ctx.fillRect(cx - 2, cy - 2, 4, 4);
+						if (Math.floor(this.mouthPhase / 250) % 2 === 0) ctx.fillRect(x + CELL_SIZE / 2 - 2, y + CELL_SIZE / 2 - 2, 4, 4);
 					}
 				}
 			}
@@ -619,10 +768,7 @@
 			text.draw(ctx, livesStr, this.game.width - 4 - livesWidth, 4, HUD_FONT);
 		}
 
-		drawPauseMessage(ctx) {
-			const message = PAUSE_MESSAGES[this.pauseMessage];
-			if (!message) return;
-
+		drawCenteredMessage(ctx, message) {
 			this.game.text.drawCentered(ctx, message, this.game.width / 2, this.game.height / 2 - 4, HUD_FONT);
 		}
 	}
