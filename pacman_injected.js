@@ -57,7 +57,8 @@
 	const GHOST_MODES = Object.freeze({
 		CHASE: "chase",
 		FRIGHTENED: "frightened",
-		EATEN: "eaten"
+		EATEN: "eaten",
+		WAITING: "waiting"
 	});
 
 	const GHOST_ROLES = Object.freeze({
@@ -72,7 +73,8 @@
 		FADE_IN: "fade_in",
 		GET_READY: "get_ready",
 		PLAYING: "playing",
-		DEATH_PAUSE: "death_pause",
+		DEATH_ANIMATION: "death_animation",
+		RESPAWN_READY: "respawn_ready",
 		ROUND_CLEAR_PAUSE: "round_clear_pause",
 		GAME_OVER_PAUSE: "game_over_pause",
 		FADE_OUT: "fade_out",
@@ -81,17 +83,19 @@
 
 	const PHASE_MESSAGES = Object.freeze({
 		get_ready: "GET READY",
-		death_pause: "OUCH",
+		respawn_ready: "GET READY",
 		round_clear_pause: "ROUND CLEAR",
 		game_over_pause: "GAME OVER"
 	});
 
 	const HUD_FONT = 4;
 	const PACMAN_INTRO_SFX = "db:scl/fi/1qey52snle571ef7zorqc/PacmanIntro.ogg?rlkey=34dawsyx5ykiyp3hobl3friha&st=ktyp9e0s&dl=0";
+	const MOVE_SOUND_URL = "https://www.dl.dropboxusercontent.com/scl/fi/j9p56iieb5w4c8ybjjus5/munchlaxChomp.ogg?rlkey=jac1zuv5wyucx92oont8gqlfu&st=g8di96v6&dl=0";
 
 	const PACMAN_RADIUS = 5;
 	const GHOST_RADIUS = 5;
 	const MOUTH_HALF_ANGLE = 0.65;
+	const DEATH_MOUTH_HALF_ANGLE = 0.9;
 	const FACING_ANGLE = Object.freeze({up: -Math.PI / 2, down: Math.PI / 2, left: Math.PI, right: 0, none: 0});
 
 	/**
@@ -101,9 +105,10 @@
 	 */
 	function buildCircleMask(radiusPx, mouthAngle, mouthHalfAngle) {
 		const mask = [];
+		const roundedRadius = Math.round(radiusPx);
 
-		for (let dy = -radiusPx; dy <= radiusPx; ++dy) {
-			for (let dx = -radiusPx; dx <= radiusPx; ++dx) {
+		for (let dy = -roundedRadius; dy <= roundedRadius; ++dy) {
+			for (let dx = -roundedRadius; dx <= roundedRadius; ++dx) {
 				if (Math.hypot(dx, dy) > radiusPx + 0.3) continue;
 
 				if (mouthHalfAngle > 0) {
@@ -169,8 +174,9 @@
 		static FRIGHTENED_DURATION = 7000;
 		static BLACK_FADE_DURATION = 250;
 		static CONTENT_FADE_DURATION = 400;
-		static GET_READY_DURATION = 3000;
-		static DEATH_PAUSE_DURATION = 1200;
+		static GET_READY_DURATION = 4500;
+		static DEATH_ANIMATION_DURATION = 1000;
+		static RESPAWN_READY_DURATION = 1500;
 		static ROUND_CLEAR_PAUSE_DURATION = 2000;
 		static GAME_OVER_PAUSE_DURATION = 2000;
 		static DOT_SCORE = 10;
@@ -208,6 +214,13 @@
 			this.dotsRemaining = 0;
 			this.frightenedTimer = 0;
 			this.spawnSealed = false;
+
+			// Preloaded up front so there's no stutter the first time the player moves.
+			this.moveSound = new Audio(MOVE_SOUND_URL);
+			this.moveSound.loop = true;
+			this.moveSound.preload = "auto";
+			this.moveSound.load();
+			this.moveSoundPlaying = false;
 		}
 
 		draw() {
@@ -249,6 +262,9 @@
 			this.game.player.canMove = this.playerFrozenBeforeStart;
 			this.active = false;
 			this.quitting = false;
+
+			this.moveSound.pause();
+			this.moveSoundPlaying = false;
 		}
 
 		setPhase(phase) {
@@ -328,6 +344,8 @@
 			this.mouthPhase += dt;
 			this.phaseElapsed += dt;
 
+			this.updateMoveSound();
+
 			switch (this.phase) {
 			case PHASES.FADE_TO_BLACK:
 				if (this.phaseElapsed >= PacmanGame.BLACK_FADE_DURATION) this.setPhase(PHASES.FADE_IN);
@@ -338,8 +356,14 @@
 			case PHASES.GET_READY:
 				if (this.phaseElapsed >= PacmanGame.GET_READY_DURATION) this.setPhase(PHASES.PLAYING);
 				return;
-			case PHASES.DEATH_PAUSE:
-				if (this.phaseElapsed >= PacmanGame.DEATH_PAUSE_DURATION) this.setPhase(PHASES.PLAYING);
+			case PHASES.DEATH_ANIMATION:
+				if (this.phaseElapsed >= PacmanGame.DEATH_ANIMATION_DURATION) {
+					this.resetPositions();
+					this.setPhase(PHASES.RESPAWN_READY);
+				}
+				return;
+			case PHASES.RESPAWN_READY:
+				if (this.phaseElapsed >= PacmanGame.RESPAWN_READY_DURATION) this.setPhase(PHASES.PLAYING);
 				return;
 			case PHASES.ROUND_CLEAR_PAUSE:
 				if (this.phaseElapsed >= PacmanGame.ROUND_CLEAR_PAUSE_DURATION) {
@@ -369,6 +393,7 @@
 
 			this.readInput();
 			this.moveEntity(this.pacman, PacmanGame.PACMAN_SPEED * dt / 1000, entity => entity.nextDir, (col, row, dir) => this.isPlayerWalkable(col, row, dir));
+			this.updateMoveSound();
 
 			if (!this.spawnSealed && (this.pacman.col !== PacmanGame.SPAWN_COL || this.pacman.row !== PacmanGame.SPAWN_ROW)) {
 				this.spawnSealed = true;
@@ -378,6 +403,26 @@
 
 			this.handleDotEating();
 			this.handleGhostCollisions();
+		}
+
+		/**
+		 * Starts or stops the looping movement sound to match whether Pac-Man
+		 * is actually walking right now (only true mid-round, never during
+		 * intros, pauses, or the death animation).
+		 */
+		updateMoveSound() {
+			const isMoving = this.phase === PHASES.PLAYING && this.pacman.dir !== DIRECTIONS.NONE;
+			if (isMoving === this.moveSoundPlaying) return;
+
+			this.moveSoundPlaying = isMoving;
+
+			if (isMoving) {
+				this.moveSound.volume = (this.game.settings.sfxVolume || 0) / 100;
+				this.moveSound.currentTime = 0;
+				this.moveSound.play().catch(() => {});
+			} else {
+				this.moveSound.pause();
+			}
 		}
 
 		endFrightened() {
@@ -467,6 +512,11 @@
 		}
 
 		updateGhost(ghost, dt) {
+			if (ghost.mode === GHOST_MODES.WAITING) {
+				if (this.frightenedTimer <= 0) ghost.mode = GHOST_MODES.CHASE;
+				return;
+			}
+
 			let speed = PacmanGame.GHOST_CHASE_SPEED;
 			if (ghost.mode === GHOST_MODES.FRIGHTENED) speed = PacmanGame.GHOST_FRIGHTENED_SPEED;
 			else if (ghost.mode === GHOST_MODES.EATEN) speed = PacmanGame.GHOST_EATEN_SPEED;
@@ -477,7 +527,7 @@
 		chooseGhostDirection(ghost) {
 			if (ghost.mode === GHOST_MODES.EATEN) {
 				if (ghost.col === PacmanGame.BOX_COL && ghost.row === PacmanGame.BOX_ROW) {
-					ghost.mode = GHOST_MODES.CHASE;
+					ghost.mode = this.frightenedTimer > 0 ? GHOST_MODES.WAITING : GHOST_MODES.CHASE;
 				} else {
 					return this.findShortestDirection(ghost.col, ghost.row, PacmanGame.BOX_COL, PacmanGame.BOX_ROW, ghost.dir);
 				}
@@ -605,7 +655,7 @@
 				this.score += PacmanGame.PELLET_SCORE;
 				this.frightenedTimer = PacmanGame.FRIGHTENED_DURATION;
 				for (const ghost of this.ghosts) {
-					if (ghost.mode === GHOST_MODES.EATEN) continue;
+					if (ghost.mode === GHOST_MODES.EATEN || ghost.mode === GHOST_MODES.WAITING) continue;
 					ghost.mode = GHOST_MODES.FRIGHTENED;
 					this.reverseGhost(ghost);
 				}
@@ -626,7 +676,7 @@
 			const pacmanPos = this.getRenderPosition(this.pacman);
 
 			for (const ghost of this.ghosts) {
-				if (ghost.mode === GHOST_MODES.EATEN) continue;
+				if (ghost.mode === GHOST_MODES.EATEN || ghost.mode === GHOST_MODES.WAITING) continue;
 
 				const ghostPos = this.getRenderPosition(ghost);
 				const distance = Math.hypot(pacmanPos.col - ghostPos.col, pacmanPos.row - ghostPos.row);
@@ -646,10 +696,10 @@
 			--this.lives;
 
 			if (this.lives <= 0) {
+				this.game.trigger("ev[pacman_score]=" + this.score);
 				this.setPhase(PHASES.GAME_OVER_PAUSE);
 			} else {
-				this.resetPositions();
-				this.setPhase(PHASES.DEATH_PAUSE);
+				this.setPhase(PHASES.DEATH_ANIMATION);
 			}
 		}
 
@@ -691,7 +741,9 @@
 			ctx.globalAlpha = alphas.content;
 
 			this.drawMaze(ctx);
-			for (const ghost of this.ghosts) this.drawGhost(ctx, ghost);
+			if (this.phase !== PHASES.DEATH_ANIMATION) {
+				for (const ghost of this.ghosts) this.drawGhost(ctx, ghost);
+			}
 			this.drawPacman(ctx);
 			this.drawHudText(ctx);
 
@@ -725,6 +777,11 @@
 		}
 
 		drawPacman(ctx) {
+			if (this.phase === PHASES.DEATH_ANIMATION) {
+				this.drawPacmanDeath(ctx);
+				return;
+			}
+
 			const pos = this.getRenderPosition(this.pacman);
 			const x = Math.round(this.offsetX + (pos.col + 0.5) * CELL_SIZE);
 			const y = Math.round(this.offsetY + (pos.row + 0.5) * CELL_SIZE);
@@ -736,12 +793,35 @@
 			for (const [dx, dy] of mask) ctx.fillRect(x + dx, y + dy, 1, 1);
 		}
 
+		/**
+		 * Death animation: a couple of quick spins with the mouth thrown wide
+		 * open, then the whole sprite shrinks away to nothing.
+		 */
+		drawPacmanDeath(ctx) {
+			const x = Math.round(this.offsetX + (this.pacman.col + 0.5) * CELL_SIZE);
+			const y = Math.round(this.offsetY + (this.pacman.row + 0.5) * CELL_SIZE);
+			const progress = Math.min(1, this.phaseElapsed / PacmanGame.DEATH_ANIMATION_DURATION);
+
+			let mask;
+			if (progress < 0.6) {
+				const spinProgress = progress / 0.6;
+				mask = buildCircleMask(PACMAN_RADIUS, spinProgress * Math.PI * 4, DEATH_MOUTH_HALF_ANGLE);
+			} else {
+				const shrinkProgress = (progress - 0.6) / 0.4;
+				const radius = PACMAN_RADIUS * (1 - shrinkProgress);
+				mask = radius > 0.5 ? buildCircleMask(radius, 0, 0) : [];
+			}
+
+			ctx.fillStyle = "#f0e030";
+			for (const [dx, dy] of mask) ctx.fillRect(x + dx, y + dy, 1, 1);
+		}
+
 		drawGhost(ctx, ghost) {
 			const pos = this.getRenderPosition(ghost);
 			const x = Math.round(this.offsetX + (pos.col + 0.5) * CELL_SIZE);
 			const y = Math.round(this.offsetY + (pos.row + 0.5) * CELL_SIZE);
 
-			if (ghost.mode === GHOST_MODES.EATEN) {
+			if (ghost.mode === GHOST_MODES.EATEN || ghost.mode === GHOST_MODES.WAITING) {
 				this.drawGhostEyes(ctx, x, y);
 				return;
 			}
