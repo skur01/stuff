@@ -279,7 +279,7 @@
 	};
 
 	const getLayerContainer = layer => {
-		if (layer === "floor") return game.containers.objects;
+		if (layer === "floor") return game.containers.bottomSprites;
 		if (layer === "bottom") return game.containers.bottomSprites;
 		if (layer === "top") return game.containers.topSprites;
 
