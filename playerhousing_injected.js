@@ -16,6 +16,10 @@
 
 	const BATTLE_TRIGGER = "phbattle";
 	const SCAN_FLAG = "phscan";
+	const CRY_TRIGGER = "phcry";
+
+	const CRY_RATE = 1.6;
+	const CRY_VOLUME = 35;
 
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
@@ -36,9 +40,18 @@
 		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: true},
 		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: true},
 
-		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1},
-		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1},
-		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1},
+		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1, interact: {
+			msg: "It's a Cadastrophe plush. You give it a squeeze.",
+			triggers: "phcry=00bxz67s"
+		}},
+		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1, interact: {
+			msg: "It's a Gobblin plush. You give it a squeeze.",
+			triggers: "phcry=000enhsj"
+		}},
+		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1, interact: {
+			msg: "It's a Mightiro plush. You give it a squeeze.",
+			triggers: "phcry=00gthy5y"
+		}},
 
 		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
 			msg: "Booted up the PC!",
@@ -477,6 +490,23 @@
 			["Set Level 50", () => startMirrorBattle(50, scan)],
 			["Back", () => openBattleMachineMenu()]
 		]);
+	};
+
+	// play() hands back the raw Audio for one-off SFX since only looping tracks get cached,
+	// so the rate can be raised on it directly. preservesPitch defaults to true, which would
+	// speed the cry up without lifting its pitch, so it gets turned off first.
+	const playPlushCry = uid => {
+		if (!uid) return;
+
+		const audio = game.sound.play("cries/" + uid + ".ogg,volume:" + CRY_VOLUME);
+
+		if (!audio) return;
+
+		audio.preservesPitch = false;
+		audio.mozPreservesPitch = false;
+		audio.webkitPreservesPitch = false;
+
+		audio.playbackRate = CRY_RATE;
 	};
 
 	const openBattleMachineMenu = () => {
@@ -1145,17 +1175,36 @@
 		game.trigger = function (str, ...rest) {
 			const parts = typeof str === "string" ? str.split("&") : null;
 
-			if (parts && parts.includes(BATTLE_TRIGGER)) {
-				const remaining = parts.filter(part => part !== BATTLE_TRIGGER);
+			if (!parts) return origTrigger.call(this, str, ...rest);
 
-				openBattleMachineMenu();
+			const remaining = [];
+			let handled = false;
 
-				if (!remaining.length) return true;
+			for (const part of parts) {
+				if (part === BATTLE_TRIGGER) {
+					openBattleMachineMenu();
 
-				return origTrigger.call(this, remaining.join("&"), ...rest);
+					handled = true;
+
+					continue;
+				}
+
+				if (part.startsWith(CRY_TRIGGER + "=")) {
+					playPlushCry(part.substring(CRY_TRIGGER.length + 1));
+
+					handled = true;
+
+					continue;
+				}
+
+				remaining.push(part);
 			}
 
-			return origTrigger.call(this, str, ...rest);
+			if (!handled) return origTrigger.call(this, str, ...rest);
+
+			if (!remaining.length) return true;
+
+			return origTrigger.call(this, remaining.join("&"), ...rest);
 		};
 	}
 
