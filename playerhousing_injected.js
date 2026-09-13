@@ -221,54 +221,47 @@
 			clamp(targetY, halfHeight, game.map.height - halfHeight);
 	};
 
-	const getScreenPosition = (tx, ty) => {
-		const rect = game.renderer.view.getBoundingClientRect();
-		const zoom = game.settings.zoom;
-
-		return {
-			x: rect.left + (tx * TILE + TILE + game.stage.x) * zoom,
-			y: rect.top + (ty * TILE + game.stage.y) * zoom
-		};
-	};
-
-	const buildCategoryOptions = (tx, ty, category, placedId) => {
-		const options = [];
+	const openCategoryMenu = (tx, ty, category) => {
+		const placedId = getSlot(tx, ty);
+		const answers = [];
 
 		for (const entry of FURNITURE) {
 			if (entry.category !== category) continue;
 
-			const locked = !isUnlocked(entry);
+			if (!isUnlocked(entry)) {
+				answers.push([entry.name + " (Locked)", () => {
+					game.textbox.say("You haven't unlocked that yet.", () => openCategoryMenu(tx, ty, category));
+				}]);
 
-			options.push([
-				entry.id === placedId,
-				locked ? entry.name + "|Locked" : entry.name,
-				() => setSlot(tx, ty, entry.id),
-				locked
-			]);
+				continue;
+			}
+
+			answers.push([entry.id === placedId ? entry.name + " *" : entry.name, () => setSlot(tx, ty, entry.id)]);
 		}
 
-		return options;
+		answers.push(["Back", () => openMenu(tx, ty)]);
+
+		game.textbox.say("Which one?");
+		game.textbox.answers(answers);
 	};
 
 	const openMenu = (tx, ty) => {
 		const placedId = getSlot(tx, ty);
-		const position = getScreenPosition(tx, ty);
-		const options = [];
+		const placed = FURNITURE_BY_ID[placedId];
+		const answers = [];
 
 		for (const category of CATEGORY_ORDER) {
-			const items = buildCategoryOptions(tx, ty, category, placedId);
+			if (!FURNITURE.some(entry => entry.category === category)) continue;
 
-			if (items.length) options.push([false, category, items]);
+			answers.push([category, () => openCategoryMenu(tx, ty, category)]);
 		}
 
-		options.push("sep");
-		options.push([false, "Pick Up", () => setSlot(tx, ty, 0), !placedId]);
+		if (placed) answers.push(["Pick Up", () => setSlot(tx, ty, 0)]);
 
-		context({
-			presetX: position.x,
-			presetY: position.y,
-			selectFirst: true
-		}, options);
+		answers.push(["Cancel"]);
+
+		game.textbox.say(placed ? "There's a " + placed.name + " here." : "This spot is empty.");
+		game.textbox.answers(answers);
 	};
 
 	const moveCursor = (dx, dy) => {
@@ -346,7 +339,7 @@
 
 		ensureGraphics();
 
-		if (CONTEXT_MENU.current || game.chat.focused || game.textbox.active > -1 || $("cover") || !game.focused) return;
+		if (game.chat.focused || game.textbox.active > -1 || $("cover") || !game.focused) return;
 
 		if (game.input.keyPressed("cancel")) {
 			game.trigger("mapvar[" + MODE_VAR + "]=0");
@@ -408,8 +401,6 @@
 		game.player.canMove = state.prevCanMove;
 
 		game.camera.setTarget(game.player);
-
-		CONTEXT_MENU.close();
 	};
 
 	if (!game.map.__playerHousingResetWrap) {
