@@ -91,6 +91,29 @@
 
 	const CATEGORY_ORDER = ["Decor", "Furniture", "Plushies", "Gadgets", "Floor Decor"];
 
+	// Room backdrop, matching the JCOAD it replaces: everything sits at xy(-8,0), the floor
+	// and wall share depth "z", the exit mat sits one above them and placed floor decor two.
+	const BACKDROP_X = -8;
+	const BACKDROP_Y = 0;
+
+	const FLOOR_DECOR_DEPTH = "z+2";
+
+	const BACKDROPS = [
+		{ev: "PlayerHousing_FloorStyle", depth: "z", options: [
+			"playerhouse_woodfloor",
+			"playerhouse_tilefloor",
+			"playerhouse_pkmncenterfloor",
+			"playerhouse_martfloor"
+		]},
+		{ev: "PlayerHousing_WallStyle", depth: "z", options: [
+			"playerhouse_plainwall",
+			"playerhouse_yellowwall",
+			"playerhouse_pkmncenterwall",
+			"playerhouse_martwall"
+		]},
+		{sprite: "playerhouse_defaultexitmatandshadow", depth: "z+1"}
+	];
+
 	const FURNITURE_BY_ID = {};
 	for (const entry of FURNITURE) {
 		FURNITURE_BY_ID[entry.id] = entry;
@@ -729,7 +752,7 @@
 		let obj;
 
 		if (floor) {
-			game.map.addObject(8, tx * TILE, ty * TILE, uid, SPRITE_OWNER + entry.sprite, "z", 0, 0, -1, -1, "0", 0, 0);
+			game.map.addObject(8, tx * TILE, ty * TILE, uid, SPRITE_OWNER + entry.sprite, FLOOR_DECOR_DEPTH, 0, 0, -1, -1, "0", 0, 0);
 
 			obj = game.objects.get(uid);
 		} else {
@@ -809,9 +832,28 @@
 		}
 	};
 
+	const renderBackdrops = () => {
+		for (let i = 0; i < BACKDROPS.length; ++i) {
+			const backdrop = BACKDROPS[i];
+
+			const sprite = backdrop.options ?
+				backdrop.options[+game.map.eventVars[backdrop.ev] || 0] :
+				backdrop.sprite;
+
+			if (!sprite) continue;
+
+			const uid = "phb_" + game.map.current + "_" + i;
+
+			game.map.addObject(8, BACKDROP_X, BACKDROP_Y, uid, SPRITE_OWNER + sprite, backdrop.depth, 0, 0, -1, -1, "0", 0, 0);
+
+			state.objectUids.push(uid);
+		}
+	};
+
 	const renderLayout = () => {
 		clearFurniture();
 
+		renderBackdrops();
 		renderPrefix(FLOOR_PREFIX + "," + game.map.current + ",");
 		renderPrefix(SLOT_PREFIX + "," + game.map.current + ",");
 	};
