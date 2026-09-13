@@ -41,6 +41,7 @@
 
 	const state = game.__playerHousing || (game.__playerHousing = {
 		active: false,
+		exiting: false,
 		cursorX: 0,
 		cursorY: 0,
 		nextStep: 0,
@@ -49,6 +50,8 @@
 		gridGfx: null,
 		cursorGfx: null,
 		objectUids: [],
+		pending: {},
+		cancelAnswer: "",
 		prevCanMove: true,
 		origStateUpdate: null,
 		ownerState: null
@@ -56,9 +59,33 @@
 
 	const getSlotKey = (tx, ty) => SLOT_PREFIX + "," + game.map.current + "," + tx + "," + ty;
 
-	const getSlot = (tx, ty) => +game.map.eventVars[getSlotKey(tx, ty)] || 0;
+	const getSlot = (tx, ty) => {
+		const key = getSlotKey(tx, ty);
 
-	const setSlot = (tx, ty, id) => game.trigger("ev[" + getSlotKey(tx, ty) + "]=" + id);
+		if (Object.prototype.hasOwnProperty.call(state.pending, key)) return state.pending[key];
+
+		return +game.map.eventVars[key] || 0;
+	};
+
+	const setSlot = (tx, ty, id) => {
+		state.pending[getSlotKey(tx, ty)] = id;
+
+		renderLayout();
+	};
+
+	const commitPending = () => {
+		for (const key in state.pending) {
+			game.trigger("ev[" + key + "]=" + state.pending[key]);
+		}
+
+		state.pending = {};
+	};
+
+	const discardPending = () => {
+		state.pending = {};
+
+		renderLayout();
+	};
 
 	const isUnlocked = entry => (+game.map.eventVars[UNLOCK_PREFIX + "," + entry.id] || 0) > 0;
 
@@ -124,14 +151,18 @@
 		clearFurniture();
 
 		const prefix = SLOT_PREFIX + "," + game.map.current + ",";
+		const slots = {};
 
 		for (const key in game.map.eventVars) {
-			if (!key.startsWith(prefix)) continue;
+			if (key.startsWith(prefix)) slots[key] = +game.map.eventVars[key] || 0;
+		}
 
-			const id = +game.map.eventVars[key] || 0;
-			if (!id) continue;
+		for (const key in state.pending) {
+			if (key.startsWith(prefix)) slots[key] = state.pending[key];
+		}
 
-			const entry = FURNITURE_BY_ID[id];
+		for (const key in slots) {
+			const entry = FURNITURE_BY_ID[slots[key]];
 			if (!entry) continue;
 
 			const coords = key.substring(prefix.length).split(",");
@@ -206,31 +237,24 @@
 	};
 
 	const followCursor = () => {
-		const halfWidth = game.camera.gameHalfWidth;
-		const halfHeight = game.camera.gameHalfHeight;
-
-		const targetX = state.cursorX * TILE + TILE / 2;
-		const targetY = state.cursorY * TILE + TILE / 2;
-
-		state.freeCam.x = game.map.width <= halfWidth * 2 ?
-			game.map.width / 2 :
-			clamp(targetX, halfWidth, game.map.width - halfWidth);
-
-		state.freeCam.y = game.map.height <= halfHeight * 2 ?
-			game.map.height / 2 :
-			clamp(targetY, halfHeight, game.map.height - halfHeight);
+		state.freeCam.x = state.cursorX * TILE + TILE / 2;
+		state.freeCam.y = state.cursorY * TILE + TILE / 2;
 	};
 
-	const openCategoryMenu = (tx, ty, category) => {
+	const openCategoryMenu = (tx, ty, category, selected = 0, top = 0) => {
 		const placedId = getSlot(tx, ty);
 		const answers = [];
 
 		for (const entry of FURNITURE) {
 			if (entry.category !== category) continue;
 
+			const index = answers.length;
+
 			if (!isUnlocked(entry)) {
-				answers.push([entry.name + " (Locked)", () => {
-					game.textbox.say("You haven't unlocked that yet.", () => openCategoryMenu(tx, ty, category));
+				answers.push([entry.name, () => {
+					game.sound.play("wrong.ogg");
+
+					openCategoryMenu(tx, ty, category, index, game.textbox.visibleAnswers.top);
 				}]);
 
 				continue;
@@ -242,7 +266,7 @@
 		answers.push(["Back", () => openMenu(tx, ty)]);
 
 		game.textbox.say("Which one?");
-		game.textbox.answers(answers);
+		game.textbox.answers(answers, selected, top);
 	};
 
 	const openMenu = (tx, ty) => {
@@ -264,9 +288,41 @@
 		game.textbox.answers(answers);
 	};
 
+	const askToFinish = () => {
+		state.cancelAnswer = "Not Done";
+
+		game.textbox.say("Are you done editing?#Save your changes?");
+		game.textbox.answers([
+			["Save", () => {
+				state.cancelAnswer = "";
+
+				commitPending();
+
+				game.trigger("mapvar[" + MODE_VAR + "]=0");
+			}],
+			["Don't Save", () => {
+				state.cancelAnswer = "";
+
+				discardPending();
+
+				game.trigger("mapvar[" + MODE_VAR + "]=0");
+			}],
+			["Not Done", () => {
+				state.cancelAnswer = "";
+			}]
+		]);
+	};
+
 	const moveCursor = (dx, dy) => {
-		state.cursorX = clamp(state.cursorX + dx, 0, getTileWidth() - 1);
-		state.cursorY = clamp(state.cursorY + dy, 0, getTileHeight() - 1);
+		const nextX = clamp(state.cursorX + dx, 0, getTileWidth() - 1);
+		const nextY = clamp(state.cursorY + dy, 0, getTileHeight() - 1);
+
+		if (nextX === state.cursorX && nextY === state.cursorY) return;
+
+		state.cursorX = nextX;
+		state.cursorY = nextY;
+
+		game.sound.play("select.ogg");
 
 		drawCursor();
 		followCursor();
@@ -325,7 +381,10 @@
 				state.cursorX = tx;
 				state.cursorY = ty;
 
+				game.sound.play("select.ogg");
+
 				drawCursor();
+				followCursor();
 			}
 		}
 
@@ -334,15 +393,36 @@
 		}
 	};
 
+	const RETURN_EASE = 8;
+	const RETURN_SNAP = 1;
+
+	const panBackToPlayer = () => {
+		const targetX = game.player.x + game.player.offset.x;
+		const targetY = game.player.y;
+
+		state.freeCam.x += (targetX - state.freeCam.x) / RETURN_EASE;
+		state.freeCam.y += (targetY - state.freeCam.y) / RETURN_EASE;
+
+		if (Math.abs(targetX - state.freeCam.x) < RETURN_SNAP && Math.abs(targetY - state.freeCam.y) < RETURN_SNAP) {
+			finishExit();
+		}
+	};
+
 	const updateBuildMode = () => {
 		if (!state.active) return;
+
+		if (state.exiting) {
+			panBackToPlayer();
+
+			return;
+		}
 
 		ensureGraphics();
 
 		if (game.chat.focused || game.textbox.active > -1 || $("cover") || !game.focused) return;
 
 		if (game.input.keyPressed("cancel")) {
-			game.trigger("mapvar[" + MODE_VAR + "]=0");
+			askToFinish();
 
 			return;
 		}
@@ -361,6 +441,9 @@
 		if (state.active) return;
 
 		state.active = true;
+		state.exiting = false;
+		state.pending = {};
+
 		state.ownerState = game.state;
 
 		state.cursorX = clamp(Math.round(game.player.x / TILE), 0, Math.max(0, getTileWidth() - 1));
@@ -376,18 +459,21 @@
 
 		game.camera.setTarget(state.freeCam);
 
-		state.origStateUpdate = game.state.update;
+		const origUpdate = game.state.update;
+
+		state.origStateUpdate = origUpdate;
 		game.state.update = function (...args) {
 			updateBuildMode();
 
-			return state.origStateUpdate.apply(this, args);
+			return origUpdate.apply(this, args);
 		};
 	};
 
-	const exitBuildMode = () => {
-		if (!state.active) return;
-
+	const finishExit = () => {
 		state.active = false;
+		state.exiting = false;
+		state.pending = {};
+		state.cancelAnswer = "";
 
 		if (state.ownerState && state.origStateUpdate) {
 			state.ownerState.update = state.origStateUpdate;
@@ -402,6 +488,38 @@
 
 		game.camera.setTarget(game.player);
 	};
+
+	const exitBuildMode = smooth => {
+		if (!state.active || state.exiting) return;
+
+		if (!smooth) {
+			finishExit();
+
+			return;
+		}
+
+		state.exiting = true;
+
+		destroyGraphics();
+	};
+
+	if (!game.textbox.__playerHousingCancelWrap) {
+		game.textbox.__playerHousingCancelWrap = true;
+
+		const origSelectAnswer = game.textbox.selectAnswer;
+
+		game.textbox.selectAnswer = function (keywords) {
+			if (state.cancelAnswer && Array.isArray(keywords)) {
+				const answers = this.queue[this.active] ? this.queue[this.active].answers : null;
+
+				if (answers && !answers.some(answer => keywords.includes(answer[0].toLowerCase()))) {
+					return origSelectAnswer.call(this, state.cancelAnswer);
+				}
+			}
+
+			return origSelectAnswer.call(this, keywords);
+		};
+	}
 
 	if (!game.map.__playerHousingResetWrap) {
 		game.map.__playerHousingResetWrap = true;
@@ -422,6 +540,6 @@
 	if ((+game.map.mapVars[MODE_VAR] || 0) === 1) {
 		enterBuildMode();
 	} else {
-		exitBuildMode();
+		exitBuildMode(true);
 	}
 })(game)
