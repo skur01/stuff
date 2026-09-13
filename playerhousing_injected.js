@@ -12,7 +12,7 @@
 
 	const SPRITE_DIR = "sprites/4543/";
 
-	const FLOOR_DEPTH = 10000;
+	const FLOOR_DEPTH = 0;
 
 	const BATTLE_TRIGGER = "phbattle";
 	const SCAN_FLAG = "phscan";
@@ -21,7 +21,7 @@
 	const CRY_RATE = 1.6;
 	const CRY_VOLUME = 35;
 
-	const PERCH_HEIGHT = 8;
+	const PERCH_HEIGHT = 14;
 
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
@@ -34,17 +34,17 @@
 			cry: "002e9pnq"
 		}},
 		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2, base: 1},
-		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2, base: 1},
-		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: true},
-		{id: 5,  name: "Yellow Pillow",      category: "Decor",       sprite: "playerhouse_yellowpillow",      layer: "map",    solid: true},
-		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2, base: 1},
-		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 1, h: 2, base: 1},
+		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2},
+		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: false},
+		{id: 5,  name: "Yellow Pillow",      category: "Decor",       sprite: "playerhouse_yellowpillow",      layer: "map",    solid: false},
+		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2},
+		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 1, h: 2},
 
 		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true},
 		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true},
 		{id: 9,  name: "Glass Table",        category: "Furniture",   sprite: "playerhouse_glasstable",        layer: "map",    solid: true},
-		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: true},
-		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: true},
+		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: false},
+		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: false},
 
 		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {
 			icon: "music",
@@ -206,7 +206,7 @@
 			h = Math.max(1, Math.ceil(size[1] / TILE));
 		}
 
-		const base = clamp(entry && typeof entry.base === "number" ? entry.base : 1, 0, h);
+		const base = clamp(entry && typeof entry.base === "number" ? entry.base : h, 0, h);
 
 		return {w, h, base};
 	};
@@ -529,9 +529,16 @@
 		return tile;
 	};
 
-	// Hops the player onto the middle of the piece. jump() only supplies the arc, so the
-	// landing spot is set first and the 8px offsets carry the player half a tile up and
-	// half a tile sideways onto the footprint's centre line.
+	// jump() only supplies the arc, so the travel is a queued moveTo running alongside it.
+	// wtw lets that move cross the piece's own solid, and movingTo[1] holds the facing so
+	// the walk does not turn the player mid hop.
+	const hop = (player, x, y) => {
+		player.wtw = true;
+
+		player.jump(PERCH_HEIGHT, true);
+		player.moveTo(x, y, player.direction + 1, 1);
+	};
+
 	const startSitting = (player, anchor, entry, touch) => {
 		if (state.perch) return;
 
@@ -543,12 +550,13 @@
 			cry: touch.cry || "",
 			landed: false,
 			leaving: false,
-			prevCanMove: player.canMove
+			prevCanMove: player.canMove,
+			prevWtw: player.wtw
 		};
 
 		player.canMove = false;
-		player.setPosition(anchor[0] * TILE + print.w * (TILE / 2) - TILE / 2, player.y - TILE / 2);
-		player.jump(PERCH_HEIGHT, true);
+
+		hop(player, anchor[0] * TILE + print.w * (TILE / 2) - TILE / 2, player.y - TILE / 2);
 
 		requestAnimationFrame(runPerchLoop);
 	};
@@ -560,11 +568,12 @@
 
 		const player = game.player;
 
-		if (player.gravity) return;
+		if (player.gravity || player.moving || player.movingTo[0]) return;
 
 		if (!perch.landed) {
 			perch.landed = true;
 
+			player.wtw = perch.prevWtw;
 			player.setDirection(0);
 
 			if (perch.cry) playPlushCry(perch.cry);
@@ -573,6 +582,8 @@
 		}
 
 		if (perch.leaving) {
+			player.wtw = perch.prevWtw;
+
 			player.setDirection(0);
 			player.canMove = perch.prevCanMove;
 
@@ -590,8 +601,7 @@
 
 		perch.leaving = true;
 
-		player.setPosition(perch.originX, perch.originY);
-		player.jump(PERCH_HEIGHT, true);
+		hop(player, perch.originX, perch.originY);
 	};
 
 	// Runs on its own frame loop rather than wrapping state.update, so it can't tangle with
