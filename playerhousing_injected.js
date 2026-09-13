@@ -12,27 +12,34 @@
 	const SPRITE_DIR = "sprites/4543/";
 
 	const FURNITURE = [
-		{id: 1,  name: "Snorlax Pillow (left)",     category: "Decor",    sprite: "playerhouse_corner1_snorlax",           layer: "map",    solid: true},
-		{id: 2,  name: "Pixelchu Statue (left)",    category: "Decor",    sprite: "playerhouse_corner1_pixelchu",          layer: "map",    solid: true},
-		{id: 3,  name: "Mart Shelves (left)",       category: "Decor",    sprite: "playerhouse_corner1_martshelves",       layer: "map",    solid: true},
-		{id: 4,  name: "Snorlax Pillow (right)",    category: "Decor",    sprite: "playerhouse_corner2_snorlax",           layer: "map",    solid: true},
-		{id: 5,  name: "Pixelchu Statue (right)",   category: "Decor",    sprite: "playerhouse_corner2_pixelchu",          layer: "map",    solid: true},
-		{id: 6,  name: "Mart Shelves (right)",      category: "Decor",    sprite: "playerhouse_corner2_martshelves",       layer: "map",    solid: true},
+		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",    solid: true},
+		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",    solid: true},
+		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",    solid: true},
+		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: true},
+		{id: 5,  name: "Yellow Pillow",      category: "Decor",       sprite: "playerhouse_yellowpillow",      layer: "map",    solid: true},
+		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",    solid: true},
+		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",    solid: true},
 
-		{id: 15, name: "Cadastrophe Plush",         category: "Plushies", sprite: "playerhouse_plush_cadastrophe",         layer: "map",    solid: true},
-		{id: 16, name: "Gobblin Plush",             category: "Plushies", sprite: "playerhouse_plush_gobblin",             layer: "map",    solid: true},
-		{id: 17, name: "Mightiro Plush",            category: "Plushies", sprite: "playerhouse_plush_mightiro",            layer: "map",    solid: true},
+		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true},
+		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true},
+		{id: 9,  name: "Glass Table",        category: "Furniture",   sprite: "playerhouse_glasstable",        layer: "map",    solid: true},
+		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: true},
+		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: true},
 
-		{id: 18, name: "PC",                        category: "Gadgets",  sprite: "playerhouse_gadget_pc",                 layer: "map",    solid: true},
-		{id: 19, name: "Radio",                     category: "Gadgets",  sprite: "playerhouse_gadget_radio",              layer: "map",    solid: true},
-		{id: 20, name: "Warp Pad",                  category: "Gadgets",  sprite: "playerhouse_gadget_warp",               layer: "bottom", solid: false},
-		{id: 21, name: "Battle Dummy",              category: "Gadgets",  sprite: "playerhouse_gadget_npcbattler",         layer: "map",    solid: true},
+		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",    solid: true},
+		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",    solid: true},
+		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",    solid: true},
 
-		{id: 22, name: "Green Carpet",              category: "Flooring", sprite: "playerhouse_floordecor_greencarpet",    layer: "bottom", solid: false},
-		{id: 23, name: "Old Spike Carpet",          category: "Flooring", sprite: "playerhouse_floordecor_oldspikecarpet", layer: "bottom", solid: false}
+		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",    solid: true},
+		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",    solid: true},
+		{id: 20, name: "Warp Pad",           category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "bottom", solid: false},
+		{id: 21, name: "Battle Dummy",       category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",    solid: true},
+
+		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "bottom", solid: false},
+		{id: 23, name: "Old Rug",            category: "Floor Decor", sprite: "playerhouse_oldrug",            layer: "bottom", solid: false}
 	];
 
-	const CATEGORY_ORDER = ["Decor", "Plushies", "Gadgets", "Flooring"];
+	const CATEGORY_ORDER = ["Decor", "Furniture", "Plushies", "Gadgets", "Floor Decor"];
 
 	const FURNITURE_BY_ID = {};
 	for (const entry of FURNITURE) {
@@ -51,6 +58,12 @@
 		cursorGfx: null,
 		objectUids: [],
 		pending: {},
+		sizes: {},
+		occupied: {},
+		carrying: 0,
+		previewUid: "",
+		camCursorX: 0,
+		camCursorY: 0,
 		cancelAnswer: "",
 		prevCanMove: true,
 		origStateUpdate: null,
@@ -99,12 +112,76 @@
 
 		if (getSlot(tx, ty)) return true;
 
+		return isFreeTile(tx, ty);
+	};
+
+	const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+
+	const isFreeTile = (tx, ty) => {
+		if (!isInBounds(tx, ty)) return false;
+
 		const row = game.map.solids[ty * TILE];
 
 		return !row || !row[tx * TILE];
 	};
 
-	const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+	const getFootprint = id => {
+		const size = state.sizes[id];
+
+		if (!size) return {left: 0, right: 0, top: 0};
+
+		return {
+			left: Math.ceil((size[0] / 2 - TILE / 2) / TILE),
+			right: Math.ceil((size[0] / 2 - TILE / 2) / TILE),
+			top: Math.ceil((size[1] - TILE) / TILE)
+		};
+	};
+
+	const forEachFootprintTile = (tx, ty, id, cb) => {
+		const print = getFootprint(id);
+
+		for (let x = tx - print.left; x <= tx + print.right; ++x) {
+			for (let y = ty - print.top; y <= ty; ++y) {
+				cb(x, y);
+			}
+		}
+	};
+
+	const canPlaceAt = (tx, ty, id) => {
+		const anchorKey = tx + "," + ty;
+		let ok = true;
+
+		forEachFootprintTile(tx, ty, id, (x, y) => {
+			if (!isFreeTile(x, y)) ok = false;
+
+			const owner = state.occupied[x + "," + y];
+			if (owner && owner !== anchorKey) ok = false;
+		});
+
+		return ok;
+	};
+
+	const measureSprites = () => {
+		let learned = false;
+
+		const measure = obj => {
+			if (!obj || !obj.furnitureId || state.sizes[obj.furnitureId]) return;
+
+			const texture = obj.sprite.texture;
+			if (!texture || !texture.valid || !texture.width) return;
+
+			state.sizes[obj.furnitureId] = [texture.width, texture.height];
+			learned = true;
+		};
+
+		for (const uid of state.objectUids) {
+			measure(game.objects.get(uid));
+		}
+
+		measure(game.objects.get(state.previewUid));
+
+		return learned;
+	};
 
 	const clearFurniture = () => {
 		for (const uid of state.objectUids) {
@@ -113,6 +190,7 @@
 		}
 
 		state.objectUids.length = 0;
+		state.occupied = {};
 	};
 
 	const getLayerContainer = layer => {
@@ -140,7 +218,14 @@
 			parent: getLayerContainer(entry.layer)
 		});
 
+		obj.furnitureId = entry.id;
+
 		state.objectUids.push(uid);
+
+		const anchorKey = tx + "," + ty;
+		forEachFootprintTile(tx, ty, entry.id, (x, y) => {
+			state.occupied[x + "," + y] = anchorKey;
+		});
 
 		if (entry.solid) game.map.addObject(0, tx * TILE, ty * TILE);
 
@@ -211,14 +296,82 @@
 
 	const drawCursor = () => {
 		const gfx = state.cursorGfx;
-		const placeable = isPlaceable(state.cursorX, state.cursorY);
-		const color = placeable ? 0x6cd8ff : 0xff5c5c;
 
 		gfx.clear();
+
+		if (state.carrying) {
+			const fits = canPlaceAt(state.cursorX, state.cursorY, state.carrying);
+			const color = fits ? 0x6cd8ff : 0xff5c5c;
+
+			gfx.lineStyle(1, color, 1);
+			gfx.beginFill(color, 0.18);
+
+			forEachFootprintTile(state.cursorX, state.cursorY, state.carrying, (x, y) => {
+				gfx.drawRect(x * TILE + 0.5, y * TILE + 0.5, TILE - 1, TILE - 1);
+			});
+
+			gfx.endFill();
+
+			return;
+		}
+
+		const color = isPlaceable(state.cursorX, state.cursorY) ? 0x6cd8ff : 0xff5c5c;
+
 		gfx.lineStyle(1, color, 1);
 		gfx.beginFill(color, 0.18);
 		gfx.drawRect(state.cursorX * TILE + 0.5, state.cursorY * TILE + 0.5, TILE - 1, TILE - 1);
 		gfx.endFill();
+	};
+
+	const destroyPreview = () => {
+		const obj = game.objects.get(state.previewUid);
+		if (obj) game.objects.remove(obj);
+
+		state.previewUid = "";
+		state.carrying = 0;
+	};
+
+	const startCarrying = id => {
+		destroyPreview();
+
+		const entry = FURNITURE_BY_ID[id];
+		if (!entry) return;
+
+		state.carrying = id;
+		state.previewUid = "ph_preview";
+
+		const obj = game.objects.add({
+			type: "sprite",
+			uid: state.previewUid,
+			texture: {
+				file: SPRITE_DIR + entry.sprite,
+				frames: 1,
+				loop: -1
+			},
+			x: state.cursorX * TILE,
+			y: state.cursorY * TILE,
+			map: game.map.current,
+			addToMap: true,
+			parent: getLayerContainer(entry.layer)
+		});
+
+		obj.furnitureId = id;
+		obj.setOpacity(65);
+
+		drawCursor();
+	};
+
+	const updatePreview = () => {
+		const obj = game.objects.get(state.previewUid);
+		if (!obj) return;
+
+		if (!obj.sprite.parent) obj.addToMap();
+
+		obj.setPosition(state.cursorX * TILE, state.cursorY * TILE);
+		obj.setOpacity(65);
+
+		obj.tint = canPlaceAt(state.cursorX, state.cursorY, state.carrying) ? 0xffffff : 0xff8080;
+		obj.sprite.tint = obj.tint;
 	};
 
 	const ensureGraphics = () => {
@@ -260,13 +413,46 @@
 				continue;
 			}
 
-			answers.push([entry.id === placedId ? entry.name + " *" : entry.name, () => setSlot(tx, ty, entry.id)]);
+			answers.push([entry.id === placedId ? entry.name + " *" : entry.name, () => startCarrying(entry.id)]);
 		}
 
 		answers.push(["Back", () => openMenu(tx, ty)]);
 
 		game.textbox.say("Which one?");
 		game.textbox.answers(answers, selected, top);
+	};
+
+	const clearAll = () => {
+		const prefix = SLOT_PREFIX + "," + game.map.current + ",";
+
+		for (const key in game.map.eventVars) {
+			if (key.startsWith(prefix)) state.pending[key] = 0;
+		}
+
+		for (const key in state.pending) {
+			if (key.startsWith(prefix)) state.pending[key] = 0;
+		}
+
+		renderLayout();
+		drawCursor();
+	};
+
+	const askToClearAll = (tx, ty) => {
+		state.cancelAnswer = "No";
+
+		game.textbox.say("Clear out everything in here?#This removes every piece you've placed.");
+		game.textbox.answers([
+			["No", () => {
+				state.cancelAnswer = "";
+
+				openMenu(tx, ty);
+			}],
+			["Yes, clear it all", () => {
+				state.cancelAnswer = "";
+
+				clearAll();
+			}]
+		]);
 	};
 
 	const openMenu = (tx, ty) => {
@@ -282,6 +468,7 @@
 
 		if (placed) answers.push(["Pick Up", () => setSlot(tx, ty, 0)]);
 
+		answers.push(["Clear All", () => askToClearAll(tx, ty)]);
 		answers.push(["Cancel"]);
 
 		game.textbox.say(placed ? "There's a " + placed.name + " here." : "This spot is empty.");
@@ -313,19 +500,30 @@
 		]);
 	};
 
-	const moveCursor = (dx, dy) => {
-		const nextX = clamp(state.cursorX + dx, 0, getTileWidth() - 1);
-		const nextY = clamp(state.cursorY + dy, 0, getTileHeight() - 1);
+	const setCursor = (tx, ty, recenter) => {
+		const nextX = clamp(tx, 0, getTileWidth() - 1);
+		const nextY = clamp(ty, 0, getTileHeight() - 1);
 
-		if (nextX === state.cursorX && nextY === state.cursorY) return;
+		const moved = nextX !== state.cursorX || nextY !== state.cursorY;
 
 		state.cursorX = nextX;
 		state.cursorY = nextY;
 
+		if (recenter) {
+			state.camCursorX = nextX;
+			state.camCursorY = nextY;
+
+			followCursor();
+		}
+
+		if (!moved) return false;
+
 		game.sound.play("select.ogg");
 
 		drawCursor();
-		followCursor();
+		updatePreview();
+
+		return true;
 	};
 
 	const readDirection = () => {
@@ -338,10 +536,13 @@
 	};
 
 	const stepCursor = direction => {
-		if (direction === 1) moveCursor(0, -1);
-		else if (direction === 2) moveCursor(0, 1);
-		else if (direction === 3) moveCursor(-1, 0);
-		else if (direction === 4) moveCursor(1, 0);
+		const fromX = state.camCursorX;
+		const fromY = state.camCursorY;
+
+		if (direction === 1) setCursor(fromX, fromY - 1, true);
+		else if (direction === 2) setCursor(fromX, fromY + 1, true);
+		else if (direction === 3) setCursor(fromX - 1, fromY, true);
+		else if (direction === 4) setCursor(fromX + 1, fromY, true);
 	};
 
 	const handleKeyboard = () => {
@@ -377,20 +578,30 @@
 			const tx = Math.floor(game.input.mouse.gameX / TILE);
 			const ty = Math.floor(game.input.mouse.gameY / TILE);
 
-			if (isInBounds(tx, ty) && (tx !== state.cursorX || ty !== state.cursorY)) {
-				state.cursorX = tx;
-				state.cursorY = ty;
+			if (isInBounds(tx, ty)) setCursor(tx, ty, false);
+		}
 
-				game.sound.play("select.ogg");
+		if (game.input.buttonPressed(1)) confirmAtCursor();
+	};
 
-				drawCursor();
-				followCursor();
+	const confirmAtCursor = () => {
+		if (state.carrying) {
+			if (!canPlaceAt(state.cursorX, state.cursorY, state.carrying)) {
+				game.sound.play("wrong.ogg");
+
+				return;
 			}
+
+			const id = state.carrying;
+
+			destroyPreview();
+			setSlot(state.cursorX, state.cursorY, id);
+			drawCursor();
+
+			return;
 		}
 
-		if (game.input.buttonPressed(1) && isPlaceable(state.cursorX, state.cursorY)) {
-			openMenu(state.cursorX, state.cursorY);
-		}
+		if (isPlaceable(state.cursorX, state.cursorY)) openMenu(state.cursorX, state.cursorY);
 	};
 
 	const RETURN_EASE = 8;
@@ -419,10 +630,22 @@
 
 		ensureGraphics();
 
+		if (measureSprites()) {
+			renderLayout();
+			drawCursor();
+		}
+
+		if (state.carrying) updatePreview();
+
 		if (game.chat.focused || game.textbox.active > -1 || $("cover") || !game.focused) return;
 
 		if (game.input.keyPressed("cancel")) {
-			askToFinish();
+			if (state.carrying) {
+				destroyPreview();
+				drawCursor();
+			} else {
+				askToFinish();
+			}
 
 			return;
 		}
@@ -430,11 +653,7 @@
 		handleKeyboard();
 		handleMouse();
 
-		if (game.input.keyPressed("action") && isPlaceable(state.cursorX, state.cursorY)) {
-			openMenu(state.cursorX, state.cursorY);
-		}
-
-		followCursor();
+		if (game.input.keyPressed("action")) confirmAtCursor();
 	};
 
 	const enterBuildMode = () => {
@@ -448,6 +667,8 @@
 
 		state.cursorX = clamp(Math.round(game.player.x / TILE), 0, Math.max(0, getTileWidth() - 1));
 		state.cursorY = clamp(Math.round(game.player.y / TILE), 0, Math.max(0, getTileHeight() - 1));
+		state.camCursorX = state.cursorX;
+		state.camCursorY = state.cursorY;
 
 		state.prevCanMove = game.player.canMove;
 		game.player.canMove = false;
@@ -475,6 +696,8 @@
 		state.pending = {};
 		state.cancelAnswer = "";
 
+		destroyPreview();
+
 		if (state.ownerState && state.origStateUpdate) {
 			state.ownerState.update = state.origStateUpdate;
 		}
@@ -500,6 +723,7 @@
 
 		state.exiting = true;
 
+		destroyPreview();
 		destroyGraphics();
 	};
 
