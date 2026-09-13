@@ -99,13 +99,13 @@
 	const FLOOR_DECOR_DEPTH = "z+2";
 
 	const BACKDROPS = [
-		{ev: "PlayerHousing_FloorStyle", depth: "z", options: [
+		{ev: "PlayerHousing_FloorStyle", depth: "z", x: 0, y: -48, options: [
 			"playerhouse_woodfloor",
 			"playerhouse_tilefloor",
 			"playerhouse_pkmncenterfloor",
 			"playerhouse_martfloor"
 		]},
-		{ev: "PlayerHousing_WallStyle", depth: "z", options: [
+		{ev: "PlayerHousing_WallStyle", depth: "z", x: 0, y: -160, options: [
 			"playerhouse_plainwall",
 			"playerhouse_yellowwall",
 			"playerhouse_pkmncenterwall",
@@ -871,7 +871,10 @@
 
 			const uid = "phb_" + game.map.current + "_" + i;
 
-			game.map.addObject(8, BACKDROP_X, BACKDROP_Y, uid, SPRITE_OWNER + sprite, backdrop.depth, 0, 0, -1, -1, "0", 0, 0);
+			const x = typeof backdrop.x === "number" ? backdrop.x : BACKDROP_X;
+			const y = typeof backdrop.y === "number" ? backdrop.y : BACKDROP_Y;
+
+			game.map.addObject(8, x, y, uid, SPRITE_OWNER + sprite, backdrop.depth, 0, 0, -1, -1, "0", 0, 0);
 
 			state.objectUids.push(uid);
 		}
