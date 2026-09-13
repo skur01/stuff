@@ -14,6 +14,10 @@
 
 	const FLOOR_DEPTH = 10000;
 
+	const RESTING_COLOR = 0x6cd8ff;
+	const UPRIGHT_COLOR = 0xffc44d;
+	const BLOCKED_COLOR = 0xff5c5c;
+
 	const FURNITURE = [
 		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2, base: 1},
 		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2, base: 1},
@@ -62,7 +66,9 @@
 		objectUids: [],
 		pending: {},
 		sizes: {},
+		preloading: 0,
 		occupied: {},
+		baseClaims: {},
 		floorOccupied: {},
 		solidTiles: [],
 		carrying: 0,
@@ -176,10 +182,12 @@
 		}
 	};
 
+	// Only the rows resting on the floor need clear ground. Upright rows are hanging in
+	// the air, so they are free to pass over walls and over the lower halves of whatever
+	// is already standing there.
 	const canPlaceAt = (tx, ty, id) => {
 		const anchorKey = tx + "," + ty;
-		const floor = isFloorId(id);
-		const claims = floor ? state.floorOccupied : state.occupied;
+		const claims = isFloorId(id) ? state.floorOccupied : state.baseClaims;
 		let ok = true;
 
 		forEachFootprintTile(tx, ty, id, (x, y, resting) => {
@@ -189,6 +197,8 @@
 				return;
 			}
 
+			if (!resting) return;
+
 			const owner = claims[x + "," + y];
 
 			if (owner) {
@@ -197,32 +207,41 @@
 				return;
 			}
 
-			if (resting && !isFreeTile(x, y)) ok = false;
+			if (!isFreeTile(x, y)) ok = false;
 		});
 
 		return ok;
 	};
 
-	const measureSprites = () => {
-		let learned = false;
+	// Footprints have to be known before the first placement, not discovered once a piece
+	// is already on the map, so pull the real image dimensions up front for anything the
+	// catalogue does not declare a size for.
+	const preloadSizes = () => {
+		if (state.preloading) return;
 
-		const measure = obj => {
-			if (!obj || !obj.furnitureId || state.sizes[obj.furnitureId]) return;
+		const missing = FURNITURE.filter(entry => !state.sizes[entry.id]);
 
-			const texture = obj.sprite.texture;
-			if (!texture || !texture.valid || !texture.width) return;
+		if (!missing.length) return;
 
-			state.sizes[obj.furnitureId] = [texture.width, texture.height];
-			learned = true;
-		};
+		state.preloading = missing.length;
 
-		for (const uid of state.objectUids) {
-			measure(game.objects.get(uid));
+		for (const entry of missing) {
+			const img = new Image();
+
+			const done = size => {
+				state.sizes[entry.id] = size;
+
+				if (--state.preloading > 0) return;
+
+				renderLayout();
+
+				if (state.active && state.cursorGfx) drawCursor();
+			};
+
+			img.onload = () => done([img.width, img.height]);
+			img.onerror = () => done([TILE, TILE]);
+			img.src = CDN_BASE + "images/" + SPRITE_DIR + entry.sprite + ".webp";
 		}
-
-		measure(game.objects.get(state.previewUid));
-
-		return learned;
 	};
 
 	const addSolid = (tx, ty) => {
@@ -253,6 +272,7 @@
 
 		state.objectUids.length = 0;
 		state.occupied = {};
+		state.baseClaims = {};
 		state.floorOccupied = {};
 
 		clearSolids();
@@ -300,9 +320,17 @@
 		const claims = floor ? state.floorOccupied : state.occupied;
 
 		forEachFootprintTile(tx, ty, entry.id, (x, y, resting) => {
-			claims[x + "," + y] = anchorKey;
+			const key = x + "," + y;
 
-			if (entry.solid && resting) addSolid(x, y);
+			if (resting) {
+				claims[key] = anchorKey;
+
+				if (!floor) state.baseClaims[key] = anchorKey;
+
+				if (entry.solid) addSolid(x, y);
+			} else if (!claims[key]) {
+				claims[key] = anchorKey;
+			}
 		});
 
 		return obj;
@@ -383,12 +411,12 @@
 
 		if (state.carrying) {
 			const fits = canPlaceAt(state.cursorX, state.cursorY, state.carrying);
-			const color = fits ? 0x6cd8ff : 0xff5c5c;
-
-			gfx.lineStyle(1, color, 1);
 
 			forEachFootprintTile(state.cursorX, state.cursorY, state.carrying, (x, y, resting) => {
-				gfx.beginFill(color, resting ? 0.28 : 0.1);
+				const tileColor = fits ? (resting ? RESTING_COLOR : UPRIGHT_COLOR) : BLOCKED_COLOR;
+
+				gfx.lineStyle(1, tileColor, 1);
+				gfx.beginFill(tileColor, resting ? 0.28 : 0.14);
 				gfx.drawRect(x * TILE + 0.5, y * TILE + 0.5, TILE - 1, TILE - 1);
 				gfx.endFill();
 			});
@@ -396,7 +424,7 @@
 			return;
 		}
 
-		const color = isPlaceable(state.cursorX, state.cursorY) ? 0x6cd8ff : 0xff5c5c;
+		const color = isPlaceable(state.cursorX, state.cursorY) ? RESTING_COLOR : BLOCKED_COLOR;
 
 		gfx.lineStyle(1, color, 1);
 		gfx.beginFill(color, 0.18);
@@ -732,11 +760,6 @@
 
 		ensureGraphics();
 
-		if (measureSprites()) {
-			renderLayout();
-			drawCursor();
-		}
-
 		if (state.carrying) updatePreview();
 
 		if (game.chat.focused || game.textbox.active > -1 || $("cover") || !game.focused) return;
@@ -860,6 +883,8 @@
 			return origReset.apply(this, args);
 		};
 	}
+
+	preloadSizes();
 
 	renderLayout();
 
