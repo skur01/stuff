@@ -4,6 +4,7 @@
 
 	const MODE_VAR = "playerhousing";
 	const SLOT_PREFIX = "ph";
+	const FLOOR_PREFIX = "phf";
 	const UNLOCK_PREFIX = "phu";
 
 	const CURSOR_FIRST_DELAY = 220;
@@ -14,13 +15,13 @@
 	const FLOOR_DEPTH = 10000;
 
 	const FURNITURE = [
-		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2},
-		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2},
-		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2},
+		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2, base: 1},
+		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2, base: 1},
+		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2, base: 1},
 		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: true},
 		{id: 5,  name: "Yellow Pillow",      category: "Decor",       sprite: "playerhouse_yellowpillow",      layer: "map",    solid: true},
-		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2},
-		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 1, h: 2},
+		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2, base: 1},
+		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 1, h: 2, base: 1},
 
 		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true},
 		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true},
@@ -28,14 +29,14 @@
 		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: true},
 		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: true},
 
-		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",    solid: true},
-		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",    solid: true},
-		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",    solid: true},
+		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1},
+		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1},
+		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1},
 
-		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",    solid: true},
-		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",    solid: true},
-		{id: 20, name: "Warp Pad",           category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "floor", solid: false},
-		{id: 21, name: "Battle Dummy",       category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",    solid: true},
+		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1},
+		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",   solid: true},
+		{id: 20, name: "Warp Machine",       category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "map",   solid: true,  w: 1, h: 3, base: 1},
+		{id: 21, name: "Battle Machine",     category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",   solid: true,  w: 1, h: 2, base: 1},
 
 		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "floor", solid: false},
 		{id: 23, name: "Old Rug",            category: "Floor Decor", sprite: "playerhouse_oldrug",            layer: "floor", solid: false}
@@ -62,6 +63,7 @@
 		pending: {},
 		sizes: {},
 		occupied: {},
+		floorOccupied: {},
 		solidTiles: [],
 		carrying: 0,
 		previewUid: "",
@@ -73,18 +75,22 @@
 		ownerState: null
 	});
 
-	const getSlotKey = (tx, ty) => SLOT_PREFIX + "," + game.map.current + "," + tx + "," + ty;
+	const isFloorEntry = entry => entry && entry.layer === "floor";
 
-	const getSlot = (tx, ty) => {
-		const key = getSlotKey(tx, ty);
+	const isFloorId = id => isFloorEntry(FURNITURE_BY_ID[id]);
+
+	const getSlotKey = (tx, ty, floor) => (floor ? FLOOR_PREFIX : SLOT_PREFIX) + "," + game.map.current + "," + tx + "," + ty;
+
+	const getSlot = (tx, ty, floor) => {
+		const key = getSlotKey(tx, ty, floor);
 
 		if (Object.prototype.hasOwnProperty.call(state.pending, key)) return state.pending[key];
 
 		return +game.map.eventVars[key] || 0;
 	};
 
-	const setSlot = (tx, ty, id) => {
-		state.pending[getSlotKey(tx, ty)] = id;
+	const setSlot = (tx, ty, id, floor) => {
+		state.pending[getSlotKey(tx, ty, floor)] = id;
 
 		renderLayout();
 	};
@@ -110,8 +116,8 @@
 
 	const isInBounds = (tx, ty) => tx >= 0 && ty >= 0 && tx < getTileWidth() && ty < getTileHeight();
 
-	const getAnchorAt = (tx, ty) => {
-		const owner = state.occupied[tx + "," + ty];
+	const getAnchorAt = (tx, ty, floor) => {
+		const owner = (floor ? state.floorOccupied : state.occupied)[tx + "," + ty];
 
 		if (!owner) return null;
 
@@ -123,7 +129,7 @@
 	const isPlaceable = (tx, ty) => {
 		if (!isInBounds(tx, ty)) return false;
 
-		if (state.occupied[tx + "," + ty]) return true;
+		if (state.occupied[tx + "," + ty] || state.floorOccupied[tx + "," + ty]) return true;
 
 		return isFreeTile(tx, ty);
 	};
@@ -140,37 +146,50 @@
 
 	const getFootprint = id => {
 		const entry = FURNITURE_BY_ID[id];
-
-		if (entry && entry.w && entry.h) return {w: entry.w, h: entry.h};
-
 		const size = state.sizes[id];
 
-		if (!size) return {w: 1, h: 1};
+		let w = entry && entry.w ? entry.w : 1;
+		let h = entry && entry.h ? entry.h : 1;
 
-		return {
-			w: Math.max(1, Math.ceil(size[0] / TILE)),
-			h: Math.max(1, Math.ceil(size[1] / TILE))
-		};
+		if (size && (!entry || !entry.w || !entry.h)) {
+			w = Math.max(1, Math.ceil(size[0] / TILE));
+			h = Math.max(1, Math.ceil(size[1] / TILE));
+		}
+
+		const base = clamp(entry && typeof entry.base === "number" ? entry.base : 1, 0, h);
+
+		return {w, h, base};
 	};
 
 	const getSpriteOffsetX = id => (getFootprint(id).w - 1) * TILE / 2;
 
+	// The bottom `base` rows rest on the floor. Anything above them is upright, like the
+	// top half of a statue leaning on a wall, so it neither blocks the player nor cares
+	// whether the tile behind it is solid.
 	const forEachFootprintTile = (tx, ty, id, cb) => {
 		const print = getFootprint(id);
 
 		for (let x = tx; x < tx + print.w; ++x) {
 			for (let y = ty - print.h + 1; y <= ty; ++y) {
-				cb(x, y);
+				cb(x, y, y > ty - print.base);
 			}
 		}
 	};
 
 	const canPlaceAt = (tx, ty, id) => {
 		const anchorKey = tx + "," + ty;
+		const floor = isFloorId(id);
+		const claims = floor ? state.floorOccupied : state.occupied;
 		let ok = true;
 
-		forEachFootprintTile(tx, ty, id, (x, y) => {
-			const owner = state.occupied[x + "," + y];
+		forEachFootprintTile(tx, ty, id, (x, y, resting) => {
+			if (!isInBounds(x, y)) {
+				ok = false;
+
+				return;
+			}
+
+			const owner = claims[x + "," + y];
 
 			if (owner) {
 				if (owner !== anchorKey) ok = false;
@@ -178,7 +197,7 @@
 				return;
 			}
 
-			if (!isFreeTile(x, y)) ok = false;
+			if (resting && !isFreeTile(x, y)) ok = false;
 		});
 
 		return ok;
@@ -234,6 +253,7 @@
 
 		state.objectUids.length = 0;
 		state.occupied = {};
+		state.floorOccupied = {};
 
 		clearSolids();
 	};
@@ -249,7 +269,8 @@
 	const getLayerDepth = layer => layer === "floor" ? FLOOR_DEPTH : 0;
 
 	const spawnFurniture = (tx, ty, entry) => {
-		const uid = "ph_" + game.map.current + "_" + tx + "_" + ty;
+		const floor = isFloorEntry(entry);
+		const uid = (floor ? "phf_" : "ph_") + game.map.current + "_" + tx + "_" + ty;
 
 		const obj = game.objects.add({
 			type: "sprite",
@@ -276,19 +297,20 @@
 		state.objectUids.push(uid);
 
 		const anchorKey = tx + "," + ty;
-		forEachFootprintTile(tx, ty, entry.id, (x, y) => {
-			state.occupied[x + "," + y] = anchorKey;
+		const claims = floor ? state.floorOccupied : state.occupied;
 
-			if (entry.solid) addSolid(x, y);
+		forEachFootprintTile(tx, ty, entry.id, (x, y, resting) => {
+			claims[x + "," + y] = anchorKey;
+
+			if (entry.solid && resting) addSolid(x, y);
 		});
 
 		return obj;
 	};
 
-	const renderLayout = () => {
-		clearFurniture();
-
-		const prefix = SLOT_PREFIX + "," + game.map.current + ",";
+	// Floor pieces are spawned first so their occupancy map is ready and so their sprites
+	// sit behind the objects that can be stacked on top of them.
+	const renderPrefix = prefix => {
 		const slots = {};
 
 		for (const key in game.map.eventVars) {
@@ -311,6 +333,13 @@
 
 			spawnFurniture(tx, ty, entry);
 		}
+	};
+
+	const renderLayout = () => {
+		clearFurniture();
+
+		renderPrefix(FLOOR_PREFIX + "," + game.map.current + ",");
+		renderPrefix(SLOT_PREFIX + "," + game.map.current + ",");
 	};
 
 	const destroyGraphics = () => {
@@ -357,13 +386,12 @@
 			const color = fits ? 0x6cd8ff : 0xff5c5c;
 
 			gfx.lineStyle(1, color, 1);
-			gfx.beginFill(color, 0.18);
 
-			forEachFootprintTile(state.cursorX, state.cursorY, state.carrying, (x, y) => {
+			forEachFootprintTile(state.cursorX, state.cursorY, state.carrying, (x, y, resting) => {
+				gfx.beginFill(color, resting ? 0.28 : 0.1);
 				gfx.drawRect(x * TILE + 0.5, y * TILE + 0.5, TILE - 1, TILE - 1);
+				gfx.endFill();
 			});
-
-			gfx.endFill();
 
 			return;
 		}
@@ -455,7 +483,6 @@
 	};
 
 	const openCategoryMenu = (tx, ty, category, selected = 0, top = 0) => {
-		const placedId = getSlot(tx, ty);
 		const answers = [];
 
 		for (const entry of FURNITURE) {
@@ -473,6 +500,8 @@
 				continue;
 			}
 
+			const placedId = getSlot(tx, ty, isFloorEntry(entry));
+
 			answers.push([entry.id === placedId ? entry.name + " *" : entry.name, () => startCarrying(entry.id)]);
 		}
 
@@ -483,14 +512,19 @@
 	};
 
 	const clearAll = () => {
-		const prefix = SLOT_PREFIX + "," + game.map.current + ",";
+		const prefixes = [
+			SLOT_PREFIX + "," + game.map.current + ",",
+			FLOOR_PREFIX + "," + game.map.current + ","
+		];
+
+		const matches = key => prefixes.some(prefix => key.startsWith(prefix));
 
 		for (const key in game.map.eventVars) {
-			if (key.startsWith(prefix)) state.pending[key] = 0;
+			if (matches(key)) state.pending[key] = 0;
 		}
 
 		for (const key in state.pending) {
-			if (key.startsWith(prefix)) state.pending[key] = 0;
+			if (matches(key)) state.pending[key] = 0;
 		}
 
 		renderLayout();
@@ -516,8 +550,12 @@
 	};
 
 	const openMenu = (tx, ty) => {
-		const placedId = getSlot(tx, ty);
-		const placed = FURNITURE_BY_ID[placedId];
+		const objectAnchor = getAnchorAt(tx, ty, false);
+		const floorAnchor = getAnchorAt(tx, ty, true);
+
+		const placed = objectAnchor ? FURNITURE_BY_ID[getSlot(objectAnchor[0], objectAnchor[1], false)] : null;
+		const placedFloor = floorAnchor ? FURNITURE_BY_ID[getSlot(floorAnchor[0], floorAnchor[1], true)] : null;
+
 		const answers = [];
 
 		for (const category of CATEGORY_ORDER) {
@@ -526,12 +564,16 @@
 			answers.push([category, () => openCategoryMenu(tx, ty, category)]);
 		}
 
-		if (placed) answers.push(["Pick Up", () => setSlot(tx, ty, 0)]);
+		if (placed) answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
+
+		if (placedFloor) answers.push(["Pick Up " + placedFloor.name, () => setSlot(floorAnchor[0], floorAnchor[1], 0, true)]);
 
 		answers.push(["Clear All", () => askToClearAll(tx, ty)]);
 		answers.push(["Cancel"]);
 
-		game.textbox.say(placed ? "There's a " + placed.name + " here." : "This spot is empty.");
+		const names = [placed, placedFloor].filter(entry => entry).map(entry => entry.name);
+
+		game.textbox.say(names.length ? "There's a " + names.join(" and a ") + " here." : "This spot is empty.");
 		game.textbox.answers(answers);
 	};
 
@@ -655,16 +697,8 @@
 			const id = state.carrying;
 
 			destroyPreview();
-			setSlot(state.cursorX, state.cursorY, id);
+			setSlot(state.cursorX, state.cursorY, id, isFloorId(id));
 			drawCursor();
-
-			return;
-		}
-
-		const anchor = getAnchorAt(state.cursorX, state.cursorY);
-
-		if (anchor) {
-			openMenu(anchor[0], anchor[1]);
 
 			return;
 		}
