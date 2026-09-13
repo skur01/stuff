@@ -11,14 +11,16 @@
 
 	const SPRITE_DIR = "sprites/4543/";
 
+	const FLOOR_DEPTH = 10000;
+
 	const FURNITURE = [
-		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",    solid: true},
-		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",    solid: true},
-		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",    solid: true},
+		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2},
+		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2},
+		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2},
 		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: true},
 		{id: 5,  name: "Yellow Pillow",      category: "Decor",       sprite: "playerhouse_yellowpillow",      layer: "map",    solid: true},
-		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",    solid: true},
-		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",    solid: true},
+		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2},
+		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 1, h: 2},
 
 		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true},
 		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true},
@@ -32,11 +34,11 @@
 
 		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",    solid: true},
 		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",    solid: true},
-		{id: 20, name: "Warp Pad",           category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "bottom", solid: false},
+		{id: 20, name: "Warp Pad",           category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "floor", solid: false},
 		{id: 21, name: "Battle Dummy",       category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",    solid: true},
 
-		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "bottom", solid: false},
-		{id: 23, name: "Old Rug",            category: "Floor Decor", sprite: "playerhouse_oldrug",            layer: "bottom", solid: false}
+		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "floor", solid: false},
+		{id: 23, name: "Old Rug",            category: "Floor Decor", sprite: "playerhouse_oldrug",            layer: "floor", solid: false}
 	];
 
 	const CATEGORY_ORDER = ["Decor", "Furniture", "Plushies", "Gadgets", "Floor Decor"];
@@ -60,6 +62,7 @@
 		pending: {},
 		sizes: {},
 		occupied: {},
+		solidTiles: [],
 		carrying: 0,
 		previewUid: "",
 		camCursorX: 0,
@@ -107,10 +110,20 @@
 
 	const isInBounds = (tx, ty) => tx >= 0 && ty >= 0 && tx < getTileWidth() && ty < getTileHeight();
 
+	const getAnchorAt = (tx, ty) => {
+		const owner = state.occupied[tx + "," + ty];
+
+		if (!owner) return null;
+
+		const parts = owner.split(",");
+
+		return [+parts[0], +parts[1]];
+	};
+
 	const isPlaceable = (tx, ty) => {
 		if (!isInBounds(tx, ty)) return false;
 
-		if (getSlot(tx, ty)) return true;
+		if (state.occupied[tx + "," + ty]) return true;
 
 		return isFreeTile(tx, ty);
 	};
@@ -126,22 +139,27 @@
 	};
 
 	const getFootprint = id => {
+		const entry = FURNITURE_BY_ID[id];
+
+		if (entry && entry.w && entry.h) return {w: entry.w, h: entry.h};
+
 		const size = state.sizes[id];
 
-		if (!size) return {left: 0, right: 0, top: 0};
+		if (!size) return {w: 1, h: 1};
 
 		return {
-			left: Math.ceil((size[0] / 2 - TILE / 2) / TILE),
-			right: Math.ceil((size[0] / 2 - TILE / 2) / TILE),
-			top: Math.ceil((size[1] - TILE) / TILE)
+			w: Math.max(1, Math.ceil(size[0] / TILE)),
+			h: Math.max(1, Math.ceil(size[1] / TILE))
 		};
 	};
+
+	const getSpriteOffsetX = id => (getFootprint(id).w - 1) * TILE / 2;
 
 	const forEachFootprintTile = (tx, ty, id, cb) => {
 		const print = getFootprint(id);
 
-		for (let x = tx - print.left; x <= tx + print.right; ++x) {
-			for (let y = ty - print.top; y <= ty; ++y) {
+		for (let x = tx; x < tx + print.w; ++x) {
+			for (let y = ty - print.h + 1; y <= ty; ++y) {
 				cb(x, y);
 			}
 		}
@@ -152,10 +170,15 @@
 		let ok = true;
 
 		forEachFootprintTile(tx, ty, id, (x, y) => {
-			if (!isFreeTile(x, y)) ok = false;
-
 			const owner = state.occupied[x + "," + y];
-			if (owner && owner !== anchorKey) ok = false;
+
+			if (owner) {
+				if (owner !== anchorKey) ok = false;
+
+				return;
+			}
+
+			if (!isFreeTile(x, y)) ok = false;
 		});
 
 		return ok;
@@ -183,6 +206,26 @@
 		return learned;
 	};
 
+	const addSolid = (tx, ty) => {
+		const px = tx * TILE;
+		const py = ty * TILE;
+
+		if (!game.map.solids[py]) game.map.solids[py] = {};
+
+		if (game.map.solids[py][px]) return;
+
+		game.map.solids[py][px] = "5";
+		state.solidTiles.push([px, py]);
+	};
+
+	const clearSolids = () => {
+		for (const tile of state.solidTiles) {
+			if (game.map.solids[tile[1]]) delete game.map.solids[tile[1]][tile[0]];
+		}
+
+		state.solidTiles.length = 0;
+	};
+
 	const clearFurniture = () => {
 		for (const uid of state.objectUids) {
 			const obj = game.objects.get(uid);
@@ -191,14 +234,19 @@
 
 		state.objectUids.length = 0;
 		state.occupied = {};
+
+		clearSolids();
 	};
 
 	const getLayerContainer = layer => {
+		if (layer === "floor") return game.containers.objects;
 		if (layer === "bottom") return game.containers.bottomSprites;
 		if (layer === "top") return game.containers.topSprites;
 
 		return game.containers.objects;
 	};
+
+	const getLayerDepth = layer => layer === "floor" ? FLOOR_DEPTH : 0;
 
 	const spawnFurniture = (tx, ty, entry) => {
 		const uid = "ph_" + game.map.current + "_" + tx + "_" + ty;
@@ -213,6 +261,11 @@
 			},
 			x: tx * TILE,
 			y: ty * TILE,
+			offset: {
+				x: getSpriteOffsetX(entry.id),
+				y: 0
+			},
+			depth: getLayerDepth(entry.layer),
 			map: game.map.current,
 			addToMap: true,
 			parent: getLayerContainer(entry.layer)
@@ -225,9 +278,9 @@
 		const anchorKey = tx + "," + ty;
 		forEachFootprintTile(tx, ty, entry.id, (x, y) => {
 			state.occupied[x + "," + y] = anchorKey;
-		});
 
-		if (entry.solid) game.map.addObject(0, tx * TILE, ty * TILE);
+			if (entry.solid) addSolid(x, y);
+		});
 
 		return obj;
 	};
@@ -350,6 +403,11 @@
 			},
 			x: state.cursorX * TILE,
 			y: state.cursorY * TILE,
+			offset: {
+				x: getSpriteOffsetX(id),
+				y: 0
+			},
+			depth: getLayerDepth(entry.layer),
 			map: game.map.current,
 			addToMap: true,
 			parent: getLayerContainer(entry.layer)
@@ -366,6 +424,8 @@
 		if (!obj) return;
 
 		if (!obj.sprite.parent) obj.addToMap();
+
+		obj.offset.custom.x = getSpriteOffsetX(state.carrying);
 
 		obj.setPosition(state.cursorX * TILE, state.cursorY * TILE);
 		obj.setOpacity(65);
@@ -597,6 +657,14 @@
 			destroyPreview();
 			setSlot(state.cursorX, state.cursorY, id);
 			drawCursor();
+
+			return;
+		}
+
+		const anchor = getAnchorAt(state.cursorX, state.cursorY);
+
+		if (anchor) {
+			openMenu(anchor[0], anchor[1]);
 
 			return;
 		}
