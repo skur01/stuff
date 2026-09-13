@@ -15,6 +15,7 @@
 	const FLOOR_DEPTH = 10000;
 
 	const BATTLE_TRIGGER = "phbattle";
+	const SCAN_FLAG = "phscan";
 
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
@@ -60,7 +61,7 @@
 			]
 		}},
 		{id: 21, name: "Battle Machine",     category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
-			msg: "The Battle Machine scanned your team.",
+			msg: "The Battle Machine whirs to life.",
 			triggers: BATTLE_TRIGGER
 		}},
 
@@ -312,14 +313,102 @@
 	// trip, so the opponent can be assembled here: the player's own party serialised with
 	// mon.store(false) and handed back as strings, which setup() rebuilds into fresh Mon
 	// objects rather than aliasing the live party.
-	const startMirrorBattle = fixedLevel => {
+	// Snapshots live in localStorage, which is per browser and not tied to the account, so
+	// a numeric ev records that a scan was ever taken. Flag set but storage empty means the
+	// snapshot was made somewhere else or wiped, and the player is told rather than shown
+	// an empty machine.
+	const getScanKey = () => "playerhousing_scan_" + (game.player.id || 0);
+
+	const readScan = () => {
+		try {
+			const raw = localStorage.getItem(getScanKey());
+
+			if (!raw) return null;
+
+			const data = JSON.parse(raw);
+
+			return data && data.mons && data.mons.length ? data : null;
+		} catch (e) {
+			return null;
+		}
+	};
+
+	const writeScan = data => {
+		try {
+			localStorage.setItem(getScanKey(), JSON.stringify(data));
+
+			return true;
+		} catch (e) {
+			return false;
+		}
+	};
+
+	const describeAge = saved => {
+		const days = Math.floor((Date.now() - saved) / 86400000);
+
+		if (days < 1) return "scanned today";
+		if (days === 1) return "scanned yesterday";
+
+		return "scanned " + days + " days ago";
+	};
+
+	const scanTeam = () => {
+		const mons = [];
+		const roster = [];
+
+		for (const mon of game.player.party.mons) {
+			if (!mon) continue;
+
+			mons.push(mon.store(false));
+			roster.push(mon.getName() + "  Lv." + mon.level);
+		}
+
+		if (!mons.length) {
+			game.textbox.say("There's nothing in your party to scan.", () => openBattleMachineMenu());
+
+			return;
+		}
+
+		const saved = writeScan({
+			mons,
+			roster,
+			name: game.player.name,
+			skin: game.player.skin,
+			saved: Date.now()
+		});
+
+		if (!saved) {
+			game.textbox.say("The Battle Machine couldn't hold onto the scan.#Your browser is refusing to store it.");
+
+			return;
+		}
+
+		game.trigger("ev[" + SCAN_FLAG + "]=1");
+
+		game.textbox.say("Scanned " + roster.length + (roster.length === 1 ? " team member." : " team members."));
+		game.textbox.say("The scan is kept on this device only.#Clearing your browser data, or playing from somewhere else, will lose it.", () => openBattleMachineMenu());
+	};
+
+	const viewScan = scan => {
+		const roster = scan.roster || [];
+
+		game.textbox.say(scan.name + "'s scanned team:");
+
+		for (let i = 0; i < roster.length; i += 3) {
+			const last = i + 3 >= roster.length;
+
+			game.textbox.say(roster.slice(i, i + 3).join("#"), last ? () => openBattleMachineMenu() : undefined);
+		}
+	};
+
+	const startMirrorBattle = (fixedLevel, scan) => {
 		if (!game.player.party.conscious()) {
 			game.textbox.say("Your team is in no shape for a practice match.");
 
 			return;
 		}
 
-		const clones = game.player.party.mons.map(mon => mon ? mon.store(false) : "");
+		const clones = scan.mons.slice(0);
 
 		const config = {
 			amount: [1, 1],
@@ -362,13 +451,13 @@
 				trainers: [
 					game.player,
 					{
-						name: game.player.name,
+						name: scan.name,
 						id: 0,
 						trainerClass: "",
-						individual: game.player.skin,
+						individual: scan.skin,
 						pressureSpeech: "You already know what I'm going to do.",
-						victorySpeech: "Of course. I know your team better than anyone.",
-						defeatSpeech: "You beat yourself. Figures.",
+						victorySpeech: "Of course. I know that team better than anyone.",
+						defeatSpeech: "You've moved on since that scan, haven't you.",
 						items: ""
 					}
 				],
@@ -381,11 +470,38 @@
 		});
 	};
 
-	const openBattleMachineMenu = () => {
+	const openLevelMenu = scan => {
 		game.textbox.say("How should it fight you?");
 		game.textbox.answers([
-			["Their Own Levels", () => startMirrorBattle(0)],
-			["Set Level 50", () => startMirrorBattle(50)],
+			["Their Own Levels", () => startMirrorBattle(0, scan)],
+			["Set Level 50", () => startMirrorBattle(50, scan)],
+			["Back", () => openBattleMachineMenu()]
+		]);
+	};
+
+	const openBattleMachineMenu = () => {
+		const scan = readScan();
+
+		if (!scan) {
+			const scannedBefore = (+game.map.eventVars[SCAN_FLAG] || 0) > 0;
+
+			game.textbox.say(scannedBefore ?
+				"The Battle Machine's records are empty.#You scanned a team once, but that snapshot was saved on another device or has been cleared from this browser." :
+				"The Battle Machine has no team on record yet.");
+
+			game.textbox.answers([
+				["Scan My Team", () => scanTeam()],
+				["Cancel"]
+			]);
+
+			return;
+		}
+
+		game.textbox.say("On record: " + scan.name + "'s team of " + scan.mons.length + ", " + describeAge(scan.saved) + ".");
+		game.textbox.answers([
+			["Battle It", () => openLevelMenu(scan)],
+			["View Team", () => viewScan(scan)],
+			["Rescan My Team", () => scanTeam()],
 			["Cancel"]
 		]);
 	};
