@@ -10,7 +10,8 @@
 	const CURSOR_FIRST_DELAY = 220;
 	const CURSOR_REPEAT_DELAY = 90;
 
-	const SPRITE_DIR = "sprites/4543/";
+	const SPRITE_OWNER = "4543/";
+	const SPRITE_DIR = "sprites/" + SPRITE_OWNER;
 
 	const FLOOR_DEPTH = 0;
 
@@ -21,7 +22,7 @@
 	const CRY_RATE = 1.6;
 	const CRY_VOLUME = 35;
 
-	const PERCH_HEIGHT = 14;
+	const PERCH_HEIGHT = 8;
 
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
@@ -556,7 +557,7 @@
 
 		player.canMove = false;
 
-		hop(player, anchor[0] * TILE + print.w * (TILE / 2) - TILE / 2, player.y - TILE / 2);
+		hop(player, anchor[0] * TILE + print.w * (TILE / 2) - TILE / 2, player.y - TILE);
 
 		requestAnimationFrame(runPerchLoop);
 	};
@@ -721,25 +722,39 @@
 		const floor = isFloorEntry(entry);
 		const uid = (floor ? "phf_" : "ph_") + game.map.current + "_" + tx + "_" + ty;
 
-		const obj = game.objects.add({
-			type: "sprite",
-			uid,
-			texture: {
-				file: SPRITE_DIR + entry.sprite,
-				frames: 1,
-				loop: -1
-			},
-			x: tx * TILE,
-			y: ty * TILE,
-			offset: {
-				x: getSpriteOffsetX(entry.id),
-				y: 0
-			},
-			depth: getLayerDepth(entry.layer),
-			map: game.map.current,
-			addToMap: true,
-			parent: getLayerContainer(entry.layer)
-		});
+		// Floor pieces go through addObject(8) so they are literally engine "z" sprites,
+		// built by the same code path as any bottom-layer sprite a map author places.
+		// Everything else keeps the hand-built object, which needs offset.custom.x to centre
+		// even-width footprints and a parent addObject cannot express.
+		let obj;
+
+		if (floor) {
+			game.map.addObject(8, tx * TILE, ty * TILE, uid, SPRITE_OWNER + entry.sprite, "z", 0, 0, -1, -1, "0", 0, 0);
+
+			obj = game.objects.get(uid);
+		} else {
+			obj = game.objects.add({
+				type: "sprite",
+				uid,
+				texture: {
+					file: SPRITE_DIR + entry.sprite,
+					frames: 1,
+					loop: -1
+				},
+				x: tx * TILE,
+				y: ty * TILE,
+				offset: {
+					x: getSpriteOffsetX(entry.id),
+					y: 0
+				},
+				depth: getLayerDepth(entry.layer),
+				map: game.map.current,
+				addToMap: true,
+				parent: getLayerContainer(entry.layer)
+			});
+		}
+
+		if (!obj) return null;
 
 		obj.furnitureId = entry.id;
 
