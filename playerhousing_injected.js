@@ -21,12 +21,18 @@
 	const CRY_RATE = 1.6;
 	const CRY_VOLUME = 35;
 
+	const PERCH_HEIGHT = 8;
+
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
 	const BLOCKED_COLOR = 0xff5c5c;
 
 	const FURNITURE = [
-		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2, base: 1},
+		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {
+			facing: 1,
+			sit: true,
+			cry: "002e9pnq"
+		}},
 		{id: 2,  name: "Pixelchu Statue",    category: "Decor",       sprite: "playerhouse_pixelchustatue",    layer: "map",   solid: true,  w: 2, h: 2, base: 1},
 		{id: 3,  name: "Mart Shelf (left)",  category: "Decor",       sprite: "playerhouse_martshelfleft",     layer: "map",   solid: true,  w: 1, h: 2, base: 1},
 		{id: 4,  name: "Blue Pillow",        category: "Decor",       sprite: "playerhouse_bluepillow",        layer: "map",    solid: true},
@@ -40,17 +46,17 @@
 		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: true},
 		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: true},
 
-		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1, interact: {
-			msg: "It's a Cadastrophe plush. You give it a squeeze.",
-			triggers: "phcry=00bxz67s"
+		{id: 15, name: "Cadastrophe Plush",  category: "Plushies",    sprite: "playerhouse_plush_cadastrophe", layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {
+			icon: "music",
+			cry: "00bxz67s"
 		}},
-		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1, interact: {
-			msg: "It's a Gobblin plush. You give it a squeeze.",
-			triggers: "phcry=000enhsj"
+		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1, touch: {
+			icon: "music",
+			cry: "000enhsj"
 		}},
-		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1, interact: {
-			msg: "It's a Mightiro plush. You give it a squeeze.",
-			triggers: "phcry=00gthy5y"
+		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1, touch: {
+			icon: "music",
+			cry: "00gthy5y"
 		}},
 
 		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
@@ -109,6 +115,7 @@
 		solidTiles: [],
 		messageTiles: [],
 		carrying: 0,
+		perch: null,
 		previewUid: "",
 		camCursorX: 0,
 		camCursorY: 0,
@@ -507,6 +514,125 @@
 		audio.webkitPreservesPitch = false;
 
 		audio.playbackRate = CRY_RATE;
+	};
+
+	const getFurnitureUid = (tx, ty, floor) => (floor ? "phf_" : "ph_") + game.map.current + "_" + tx + "_" + ty;
+
+	const getFacedTile = player => {
+		const tile = [Math.round(player.x / TILE), Math.round(player.y / TILE)];
+
+		if (player.direction === 0) ++tile[1];
+		else if (player.direction === 1) --tile[1];
+		else if (player.direction === 2) ++tile[0];
+		else if (player.direction === 3) --tile[0];
+
+		return tile;
+	};
+
+	// Hops the player onto the middle of the piece. jump() only supplies the arc, so the
+	// landing spot is set first and the 8px offsets carry the player half a tile up and
+	// half a tile sideways onto the footprint's centre line.
+	const startSitting = (player, anchor, entry, touch) => {
+		if (state.perch) return;
+
+		const print = getFootprint(entry.id);
+
+		state.perch = {
+			originX: player.x,
+			originY: player.y,
+			cry: touch.cry || "",
+			landed: false,
+			leaving: false,
+			prevCanMove: player.canMove
+		};
+
+		player.canMove = false;
+		player.setPosition(anchor[0] * TILE + print.w * (TILE / 2) - TILE / 2, player.y - TILE / 2);
+		player.jump(PERCH_HEIGHT, true);
+
+		requestAnimationFrame(runPerchLoop);
+	};
+
+	const updatePerch = () => {
+		const perch = state.perch;
+
+		if (!perch) return;
+
+		const player = game.player;
+
+		if (player.gravity) return;
+
+		if (!perch.landed) {
+			perch.landed = true;
+
+			player.setDirection(0);
+
+			if (perch.cry) playPlushCry(perch.cry);
+
+			return;
+		}
+
+		if (perch.leaving) {
+			player.setDirection(0);
+			player.canMove = perch.prevCanMove;
+
+			state.perch = null;
+
+			return;
+		}
+
+		if (game.textbox.active > -1 || game.chat.focused || !game.focused) return;
+
+		const moving = game.input.keyHeld("up") || game.input.keyHeld("down") ||
+			game.input.keyHeld("left") || game.input.keyHeld("right");
+
+		if (!moving) return;
+
+		perch.leaving = true;
+
+		player.setPosition(perch.originX, perch.originY);
+		player.jump(PERCH_HEIGHT, true);
+	};
+
+	// Runs on its own frame loop rather than wrapping state.update, so it can't tangle with
+	// the build mode wrap being installed and removed underneath it.
+	const runPerchLoop = () => {
+		if (!state.perch) return;
+
+		updatePerch();
+
+		if (state.perch) requestAnimationFrame(runPerchLoop);
+	};
+
+	const handleFurnitureTouch = player => {
+		const tile = getFacedTile(player);
+		const anchor = getAnchorAt(tile[0], tile[1], false);
+
+		if (!anchor) return false;
+
+		const entry = FURNITURE_BY_ID[getSlot(anchor[0], anchor[1], false)];
+
+		if (!entry || !entry.touch) return false;
+
+		const touch = entry.touch;
+
+		if (typeof touch.facing === "number" && touch.facing !== player.direction) return false;
+
+		if (touch.sit) {
+			startSitting(player, anchor, entry, touch);
+
+			return true;
+		}
+
+		if (touch.icon) {
+			const obj = game.objects.get(getFurnitureUid(anchor[0], anchor[1], isFloorEntry(entry)));
+
+			if (obj) obj.createIcon(touch.icon, 0, true);
+		}
+
+		if (touch.cry) playPlushCry(touch.cry);
+
+		return true;
 	};
 
 	const openBattleMachineMenu = () => {
@@ -1167,6 +1293,21 @@
 
 	// Tile messages can only carry trigger strings, so the Battle Machine gets its own
 	// keyword and game.trigger is taught to route it back into this file.
+	// Pressing action calls checkForInteraction with no coordinates. Intercepting there gives
+	// furniture a JS response without routing through a tile message, which would always
+	// open a textbox.
+	if (!game.map.__playerHousingTouchWrap) {
+		game.map.__playerHousingTouchWrap = true;
+
+		const origCheck = game.map.checkForInteraction;
+
+		game.map.checkForInteraction = function (obj, x, y, msg, ontouch, ontile, onlyCheckSolids) {
+			if (x === undefined && obj && obj.local && !onlyCheckSolids && handleFurnitureTouch(obj)) return true;
+
+			return origCheck.call(this, obj, x, y, msg, ontouch, ontile, onlyCheckSolids);
+		};
+	}
+
 	if (!game.__playerHousingTriggerWrap) {
 		game.__playerHousingTriggerWrap = true;
 
