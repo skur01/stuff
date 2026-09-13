@@ -14,6 +14,8 @@
 
 	const FLOOR_DEPTH = 10000;
 
+	const BATTLE_TRIGGER = "phbattle";
+
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
 	const BLOCKED_COLOR = 0xff5c5c;
@@ -37,10 +39,30 @@
 		{id: 16, name: "Gobblin Plush",      category: "Plushies",    sprite: "playerhouse_plush_gobblin",     layer: "map",   solid: true,  w: 1, h: 1, base: 1},
 		{id: 17, name: "Mightiro Plush",     category: "Plushies",    sprite: "playerhouse_plush_mightiro",    layer: "map",   solid: true,  w: 1, h: 1, base: 1},
 
-		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1},
-		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",   solid: true},
-		{id: 20, name: "Warp Machine",       category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "map",   solid: true,  w: 1, h: 3, base: 1},
-		{id: 21, name: "Battle Machine",     category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",   solid: true,  w: 1, h: 2, base: 1},
+		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
+			msg: "Booted up the PC!",
+			triggers: "pc"
+		}},
+		{id: 19, name: "Radio",              category: "Gadgets",     sprite: "playerhouse_gadget_radio",      layer: "map",   solid: true, interact: {
+			msg: "What would you like to change the music to?",
+			answers: [
+				["Default", "", "track=db:scl/fi/ntrl80cavyqmt1qgro2ux/TomadatchiLife-BW.ogg?rlkey=jtngvf970ggsg3p7f2dciqgj0^st=wu5jgvkd^dl=0&ev[PlayerHousing_Music]=0"],
+				["Cool", "", "track=db:scl/fi/6r4kspc0kchpxze0wdqel/AfterSchoolSpecial-Blockland-BW.ogg?rlkey=vh3x396769wdiidz8abf4xutu^st=j5b2ni2r^dl=0&ev[PlayerHousing_Music]=1"],
+				["Pleasant", "", "track=db:scl/fi/ydydeubwrccaby7f87ka7/PokemonLeague-DP.ogg?rlkey=m3hngu89q3bdz9swaca91el1b^st=fy2ixdba^dl=0&ev[PlayerHousing_Music]=2"],
+				["Cancel"]
+			]
+		}},
+		{id: 20, name: "Warp Machine",       category: "Gadgets",     sprite: "playerhouse_gadget_warp",       layer: "map",   solid: true,  w: 1, h: 3, base: 1, interact: {
+			msg: "Where would you like to warp to?",
+			answers: [
+				["Battle Tower", "", "warp=08j07bln,1"],
+				["Cancel"]
+			]
+		}},
+		{id: 21, name: "Battle Machine",     category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
+			msg: "The Battle Machine scanned your team.",
+			triggers: BATTLE_TRIGGER
+		}},
 
 		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "floor", solid: false},
 		{id: 23, name: "Old Rug",            category: "Floor Decor", sprite: "playerhouse_oldrug",            layer: "floor", solid: false}
@@ -71,6 +93,7 @@
 		baseClaims: {},
 		floorOccupied: {},
 		solidTiles: [],
+		messageTiles: [],
 		carrying: 0,
 		previewUid: "",
 		camCursorX: 0,
@@ -244,6 +267,129 @@
 		}
 	};
 
+	// Mirrors what JCOAD's msg()/answers= pair compiles to: addObject(1) registers the tile
+	// message, addObject(11) registers each answer's follow-up message and triggers.
+	const registerInteraction = (tx, ty, entry) => {
+		const interact = entry.interact;
+
+		if (!interact) return;
+
+		const px = tx * TILE;
+		const py = ty * TILE;
+
+		// renderLayout runs far more often than map.reset, and addObject(1) appends rather
+		// than replaces, so a tile the map already speaks for is left alone and anything we
+		// do register gets tracked for teardown.
+		if (game.map.messages[py] && game.map.messages[py][px]) return;
+
+		state.messageTiles.push([px, py]);
+
+		const answers = interact.answers || [];
+		const parts = [];
+
+		if (interact.triggers) parts.push(interact.triggers);
+
+		if (answers.length) parts.push("answers=" + answers.map(answer => answer[0]).join(","));
+
+		game.map.direction = 0;
+		game.map.addObject(1, px, py, interact.msg, parts.join("&"));
+
+		for (const answer of answers) {
+			game.map.addObject(11, px, py, answer[0], answer[1] || "", answer[2] || "");
+		}
+	};
+
+	const clearInteractions = () => {
+		for (const tile of state.messageTiles) {
+			if (game.map.messages[tile[1]]) delete game.map.messages[tile[1]][tile[0]];
+			if (game.map.answers[tile[1]]) delete game.map.answers[tile[1]][tile[0]];
+		}
+
+		state.messageTiles.length = 0;
+	};
+
+	// Mirror match. battle.load() builds the teams and calls setup() with no server round
+	// trip, so the opponent can be assembled here: the player's own party serialised with
+	// mon.store(false) and handed back as strings, which setup() rebuilds into fresh Mon
+	// objects rather than aliasing the live party.
+	const startMirrorBattle = fixedLevel => {
+		if (!game.player.party.conscious()) {
+			game.textbox.say("Your team is in no shape for a practice match.");
+
+			return;
+		}
+
+		const clones = game.player.party.mons.map(mon => mon ? mon.store(false) : "");
+
+		const config = {
+			amount: [1, 1],
+			noExp: true,
+			noMoney: true,
+			noCatch: true,
+			notWild: true,
+			noSeen: true,
+			fixedLevel: fixedLevel ? [fixedLevel, fixedLevel] : [0, 0],
+			onend: () => {
+				game.player.tmpPartner = null;
+				game.player.enemyPartner = null;
+				game.player.caughtMons = null;
+
+				game.sound.playTrack("");
+				game.weather.unhide();
+
+				game.state.set("overworld");
+
+				game.battling = false;
+
+				game.setZoom(game.settings.zoom);
+				game.player.createIcon(0);
+			}
+		};
+
+		game.battling = true;
+
+		game.fadeTransition(-1, "#000", () => {
+			game.player.party.upload();
+			game.player.createIcon(12, 1);
+
+			game.state.set("battle");
+
+			game.player.relay = data => game.client.relay(data);
+
+			const battleData = {
+				types: ["player", "npc"],
+				mons: [game.player.party.mons, clones],
+				trainers: [
+					game.player,
+					{
+						name: game.player.name,
+						id: 0,
+						trainerClass: "",
+						individual: game.player.skin,
+						pressureSpeech: "You already know what I'm going to do.",
+						victorySpeech: "Of course. I know your team better than anyone.",
+						defeatSpeech: "You beat yourself. Figures.",
+						items: ""
+					}
+				],
+				config: {}
+			};
+
+			if (REGION.battleTheme) game.sound.playTrack(REGION.battleTheme);
+
+			game.battle.load(battleData, config);
+		});
+	};
+
+	const openBattleMachineMenu = () => {
+		game.textbox.say("How should it fight you?");
+		game.textbox.answers([
+			["Their Own Levels", () => startMirrorBattle(0)],
+			["Set Level 50", () => startMirrorBattle(50)],
+			["Cancel"]
+		]);
+	};
+
 	const addSolid = (tx, ty) => {
 		const px = tx * TILE;
 		const py = ty * TILE;
@@ -276,6 +422,7 @@
 		state.floorOccupied = {};
 
 		clearSolids();
+		clearInteractions();
 	};
 
 	const getLayerContainer = layer => {
@@ -328,6 +475,8 @@
 				if (!floor) state.baseClaims[key] = anchorKey;
 
 				if (entry.solid) addSolid(x, y);
+
+				registerInteraction(x, y, entry);
 			} else if (!claims[key]) {
 				claims[key] = anchorKey;
 			}
@@ -867,6 +1016,30 @@
 			}
 
 			return origSelectAnswer.call(this, keywords);
+		};
+	}
+
+	// Tile messages can only carry trigger strings, so the Battle Machine gets its own
+	// keyword and game.trigger is taught to route it back into this file.
+	if (!game.__playerHousingTriggerWrap) {
+		game.__playerHousingTriggerWrap = true;
+
+		const origTrigger = game.trigger;
+
+		game.trigger = function (str, ...rest) {
+			const parts = typeof str === "string" ? str.split("&") : null;
+
+			if (parts && parts.includes(BATTLE_TRIGGER)) {
+				const remaining = parts.filter(part => part !== BATTLE_TRIGGER);
+
+				openBattleMachineMenu();
+
+				if (!remaining.length) return true;
+
+				return origTrigger.call(this, remaining.join("&"), ...rest);
+			}
+
+			return origTrigger.call(this, str, ...rest);
 		};
 	}
 
