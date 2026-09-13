@@ -99,13 +99,13 @@
 	const FLOOR_DECOR_DEPTH = "z+2";
 
 	const BACKDROPS = [
-		{ev: "PlayerHousing_FloorStyle", depth: "z", x: 0, y: -48, options: [
+		{ev: "PlayerHousing_FloorStyle", depth: "z", x: 128, y: 192, options: [
 			"playerhouse_woodfloor",
 			"playerhouse_tilefloor",
 			"playerhouse_pkmncenterfloor",
 			"playerhouse_martfloor"
 		]},
-		{ev: "PlayerHousing_WallStyle", depth: "z", x: 0, y: -160, options: [
+		{ev: "PlayerHousing_WallStyle", depth: "z", x: 128, y: 80, options: [
 			"playerhouse_plainwall",
 			"playerhouse_yellowwall",
 			"playerhouse_pkmncenterwall",
@@ -743,7 +743,24 @@
 		state.solidTiles.length = 0;
 	};
 
+	// Sweeps anything still registered under our uid prefixes, not just what this run put in
+	// objectUids, so leftovers from an earlier version of the file or an interrupted render
+	// cannot linger on the map.
+	const sweepStrays = () => {
+		for (const uid in game.objects.ids) {
+			if (!uid.startsWith("ph_") && !uid.startsWith("phf_") && !uid.startsWith("phb_")) continue;
+
+			if (uid === state.previewUid) continue;
+
+			const obj = game.objects.ids[uid];
+
+			if (obj) game.objects.remove(obj);
+		}
+	};
+
 	const clearFurniture = () => {
+		sweepStrays();
+
 		for (const uid of state.objectUids) {
 			const obj = game.objects.get(uid);
 			if (obj) game.objects.remove(obj);
@@ -859,7 +876,32 @@
 		}
 	};
 
+	// The old JCOAD floor and wall sprites were added under generated uids, and map.reset()
+	// does not clear bottomSprites, so one can sit there forever. Anything registered whose
+	// uid names a backdrop sprite but is not one of ours gets swept first.
+	const sweepLegacyBackdrops = () => {
+		const names = [];
+
+		for (const backdrop of BACKDROPS) {
+			if (backdrop.sprite) names.push(backdrop.sprite);
+
+			if (backdrop.options) names.push(...backdrop.options);
+		}
+
+		for (const obj of game.objects.list.slice(0)) {
+			if (!obj.uid || typeof obj.uid !== "string") continue;
+
+			const uid = obj.uid.toLowerCase();
+
+			if (uid.startsWith("phb_")) continue;
+
+			if (names.some(name => uid.includes(name))) game.objects.remove(obj);
+		}
+	};
+
 	const renderBackdrops = () => {
+		sweepLegacyBackdrops();
+
 		for (let i = 0; i < BACKDROPS.length; ++i) {
 			const backdrop = BACKDROPS[i];
 
