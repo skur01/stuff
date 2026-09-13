@@ -114,6 +114,21 @@
 		{sprite: "playerhouse_defaultexitmatandshadow", depth: "z+1"}
 	];
 
+	const STYLE_MENUS = [
+		{label: "Flooring", ev: "PlayerHousing_FloorStyle", options: [
+			["Wooden Floor", 0],
+			["Tile Floor", 1],
+			["Pkmn Center Floor", 2],
+			["Mart Floor", 3]
+		]},
+		{label: "Walls", ev: "PlayerHousing_WallStyle", options: [
+			["Plain Wall", 0],
+			["Yellow Wall", 1],
+			["Pkmn Center Wall", 2],
+			["Mart Wall", 3]
+		]}
+	];
+
 	const FURNITURE_BY_ID = {};
 	for (const entry of FURNITURE) {
 		FURNITURE_BY_ID[entry.id] = entry;
@@ -165,6 +180,18 @@
 
 	const setSlot = (tx, ty, id, floor) => {
 		state.pending[getSlotKey(tx, ty, floor)] = id;
+
+		renderLayout();
+	};
+
+	const getEv = name => {
+		if (Object.prototype.hasOwnProperty.call(state.pending, name)) return state.pending[name];
+
+		return +game.map.eventVars[name] || 0;
+	};
+
+	const setEv = (name, value) => {
+		state.pending[name] = value;
 
 		renderLayout();
 	};
@@ -837,7 +864,7 @@
 			const backdrop = BACKDROPS[i];
 
 			const sprite = backdrop.options ?
-				backdrop.options[+game.map.eventVars[backdrop.ev] || 0] :
+				backdrop.options[getEv(backdrop.ev)] :
 				backdrop.sprite;
 
 			if (!sprite) continue;
@@ -1027,6 +1054,20 @@
 		game.textbox.answers(answers, selected, top);
 	};
 
+	const openStyleMenu = (menu, tx, ty) => {
+		const current = getEv(menu.ev);
+
+		const answers = menu.options.map(option => [
+			option[1] === current ? option[0] + " *" : option[0],
+			() => setEv(menu.ev, option[1])
+		]);
+
+		answers.push(["Back", () => openMenu(tx, ty)]);
+
+		game.textbox.say("Which one?");
+		game.textbox.answers(answers);
+	};
+
 	const clearAll = () => {
 		const prefixes = [
 			SLOT_PREFIX + "," + game.map.current + ",",
@@ -1078,6 +1119,10 @@
 			if (!FURNITURE.some(entry => entry.category === category)) continue;
 
 			answers.push([category, () => openCategoryMenu(tx, ty, category)]);
+		}
+
+		for (const menu of STYLE_MENUS) {
+			answers.push([menu.label, () => openStyleMenu(menu, tx, ty)]);
 		}
 
 		if (placed) answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
