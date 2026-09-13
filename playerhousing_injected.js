@@ -111,7 +111,7 @@
 			"playerhouse_pkmncenterwall",
 			"playerhouse_martwall"
 		]},
-		{sprite: "playerhouse_defaultexitmatandshadow", depth: "z+1"}
+		{sprite: "playerhouse_defaultexitmatandshadow", depth: "z+1", x: 120, y: 240}
 	];
 
 	const STYLE_MENUS = [
@@ -746,11 +746,15 @@
 	// Sweeps anything still registered under our uid prefixes, not just what this run put in
 	// objectUids, so leftovers from an earlier version of the file or an interrupted render
 	// cannot linger on the map.
-	const sweepStrays = () => {
-		for (const uid in game.objects.ids) {
-			if (!uid.startsWith("ph_") && !uid.startsWith("phf_") && !uid.startsWith("phb_")) continue;
+	const isOurUid = uid => uid.startsWith("ph_") || uid.startsWith("phf_") || uid.startsWith("phb_");
 
-			if (uid === state.previewUid) continue;
+	// map.reset() calls removeFromMap() on string-uid objects but leaves them registered, so
+	// a piece that survives an update only needs addToMap() again. Destroying and rebuilding
+	// them meant a fresh async texture load whenever the clock ticked, which is what made
+	// the whole room blink.
+	const sweepUnwanted = wanted => {
+		for (const uid in game.objects.ids) {
+			if (!isOurUid(uid) || uid === state.previewUid || wanted[uid]) continue;
 
 			const obj = game.objects.ids[uid];
 
@@ -758,14 +762,7 @@
 		}
 	};
 
-	const clearFurniture = () => {
-		sweepStrays();
-
-		for (const uid of state.objectUids) {
-			const obj = game.objects.get(uid);
-			if (obj) game.objects.remove(obj);
-		}
-
+	const clearTracking = () => {
 		state.objectUids.length = 0;
 		state.occupied = {};
 		state.baseClaims = {};
@@ -795,11 +792,19 @@
 		// even-width footprints and a parent addObject cannot express.
 		let obj;
 
+		const existing = game.objects.get(uid);
+
 		if (floor) {
 			game.map.addObject(8, tx * TILE, ty * TILE, uid, SPRITE_OWNER + entry.sprite, FLOOR_DECOR_DEPTH, 0, 0, -1, -1, "0", 0, 0);
 
 			obj = game.objects.get(uid);
+		} else if (existing && existing.furnitureId === entry.id) {
+			obj = existing;
+
+			if (!obj.sprite.parent) obj.addToMap();
 		} else {
+			if (existing) game.objects.remove(existing);
+
 			obj = game.objects.add({
 				type: "sprite",
 				uid,
@@ -923,11 +928,19 @@
 	};
 
 	const renderLayout = () => {
-		clearFurniture();
+		clearTracking();
 
 		renderBackdrops();
 		renderPrefix(FLOOR_PREFIX + "," + game.map.current + ",");
 		renderPrefix(SLOT_PREFIX + "," + game.map.current + ",");
+
+		const wanted = {};
+
+		for (const uid of state.objectUids) {
+			wanted[uid] = true;
+		}
+
+		sweepUnwanted(wanted);
 	};
 
 	const destroyGraphics = () => {
@@ -1512,7 +1525,7 @@
 		const origReset = game.map.reset;
 
 		game.map.reset = function (...args) {
-			clearFurniture();
+			clearTracking();
 
 			if (!this.updating) destroyGraphics();
 
