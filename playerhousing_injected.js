@@ -36,6 +36,8 @@
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
 	const BLOCKED_COLOR = 0xff5c5c;
+	const OCCUPIED_COLOR = 0x6cd8ff;
+	const HOVER_COLOR = 0x5cff8f;
 
 	const FURNITURE = [
 		{id: 1,  name: "Snorlax Pillow",     category: "Decor",       sprite: "playerhouse_snorlaxpillow",     layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {
@@ -166,6 +168,7 @@
 		freeCam: {x: 0, y: 0, offset: {x: 0, y: 0}},
 		gridGfx: null,
 		cursorGfx: null,
+		occupancyGfx: null,
 		objectUids: [],
 		pending: {},
 		sizes: {},
@@ -996,9 +999,17 @@
 		}
 
 		sweepUnwanted(wanted);
+
+		drawOccupancy();
 	};
 
 	const destroyGraphics = () => {
+		if (state.occupancyGfx) {
+			if (state.occupancyGfx.parent) state.occupancyGfx.parent.removeChild(state.occupancyGfx);
+			state.occupancyGfx.destroy();
+			state.occupancyGfx = null;
+		}
+
 		if (state.gridGfx) {
 			if (state.gridGfx.parent) state.gridGfx.parent.removeChild(state.gridGfx);
 			state.gridGfx.destroy();
@@ -1052,7 +1063,10 @@
 			return;
 		}
 
-		const color = isPlaceable(state.cursorX, state.cursorY) ? RESTING_COLOR : BLOCKED_COLOR;
+		const hovering = state.occupied[state.cursorX + "," + state.cursorY] ||
+			state.floorOccupied[state.cursorX + "," + state.cursorY];
+
+		const color = hovering ? HOVER_COLOR : (isPlaceable(state.cursorX, state.cursorY) ? RESTING_COLOR : BLOCKED_COLOR);
 
 		gfx.lineStyle(1, color, 1);
 		gfx.beginFill(color, 0.18);
@@ -1173,7 +1187,39 @@
 		obj.sprite.tint = obj.tint;
 	};
 
+	// One faint tile per claimed square, so the footprint of everything in the room is
+	// readable at a glance rather than only while carrying something.
+	const drawOccupancy = () => {
+		const gfx = state.occupancyGfx;
+
+		if (!gfx) return;
+
+		gfx.clear();
+		gfx.beginFill(OCCUPIED_COLOR, 0.1);
+
+		const seen = {};
+
+		for (const claims of [state.occupied, state.floorOccupied]) {
+			for (const key in claims) {
+				if (seen[key]) continue;
+
+				seen[key] = true;
+
+				const parts = key.split(",");
+
+				gfx.drawRect(+parts[0] * TILE, +parts[1] * TILE, TILE, TILE);
+			}
+		}
+
+		gfx.endFill();
+	};
+
 	const ensureGraphics = () => {
+		if (!state.occupancyGfx) {
+			state.occupancyGfx = new PIXI.Graphics();
+			drawOccupancy();
+		}
+
 		if (!state.gridGfx) {
 			state.gridGfx = new PIXI.Graphics();
 			drawGrid();
@@ -1184,6 +1230,7 @@
 			drawCursor();
 		}
 
+		if (!state.occupancyGfx.parent) game.containers.overlay.addChild(state.occupancyGfx);
 		if (!state.gridGfx.parent) game.containers.overlay.addChild(state.gridGfx);
 		if (!state.cursorGfx.parent) game.containers.overlay.addChild(state.cursorGfx);
 	};
