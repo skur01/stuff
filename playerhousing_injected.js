@@ -60,6 +60,14 @@
 			cry: "00gthy5y"
 		}},
 
+		{id: 24, name: "Bulbasaur Plush",     category: "Plushies",    sprite: "playerhouse_bulbasaurplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "005achff"}},
+		{id: 25, name: "Charmander Plush",    category: "Plushies",    sprite: "playerhouse_charmanderplush",   layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00rhslo2"}},
+		{id: 26, name: "Squirtle Plush",      category: "Plushies",    sprite: "playerhouse_squirtleplush",     layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00n6hvc7"}},
+		{id: 27, name: "Chikorita Plush",     category: "Plushies",    sprite: "playerhouse_chicoritaplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00q4ieqb"}},
+		{id: 28, name: "Cyndaquil Plush",     category: "Plushies",    sprite: "playerhouse_cyndaquilplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00llbsbo"}},
+		{id: 29, name: "Totodile Plush",      category: "Plushies",    sprite: "playerhouse_totodileplush",     layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00rj2mth"}},
+		{id: 30, name: "Lapras Plush",        category: "Plushies",    sprite: "playerhouse_laprasplush",       layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {icon: "music"}},
+
 		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
 			msg: "Booted up the PC!",
 			triggers: "pc"
@@ -423,6 +431,20 @@
 		return "scanned " + days + " days ago";
 	};
 
+	// compressMon only writes the ";b" held item when mon.item is an object carrying a uid,
+	// so a mon holding a bare uid string loses its item in the snapshot. Append it by hand
+	// when the store string came back without one.
+	const storeWithItem = mon => {
+		let str = mon.store(false);
+
+		const item = mon.item;
+		const uid = item ? (typeof item === "string" ? item : item.uid) : "";
+
+		if (uid && !str.includes(";b ")) str += ";b " + uid;
+
+		return str;
+	};
+
 	const scanTeam = () => {
 		const mons = [];
 		const roster = [];
@@ -430,7 +452,7 @@
 		for (const mon of game.player.party.mons) {
 			if (!mon) continue;
 
-			mons.push(mon.store(false));
+			mons.push(storeWithItem(mon));
 			roster.push(mon.getName() + "  Lv." + mon.level);
 		}
 
@@ -488,6 +510,7 @@
 			noCatch: true,
 			notWild: true,
 			noSeen: true,
+			routines: "expert",
 			fixedLevel: fixedLevel ? [fixedLevel, fixedLevel] : [0, 0],
 			onend: () => {
 				game.player.tmpPartner = null;
@@ -522,13 +545,13 @@
 				trainers: [
 					game.player,
 					{
-						name: scan.name,
+						name: "Battle Scan " + scan.name,
 						id: 0,
 						trainerClass: "",
 						individual: scan.skin,
-						pressureSpeech: "You already know what I'm going to do.",
-						victorySpeech: "Of course. I know that team better than anyone.",
-						defeatSpeech: "You've moved on since that scan, haven't you.",
+						pressureSpeech: "",
+						victorySpeech: "",
+						defeatSpeech: "",
 						items: ""
 					}
 				],
