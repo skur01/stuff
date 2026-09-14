@@ -26,6 +26,13 @@
 
 	const GHOST_OPACITY = 30;
 
+	// Spawned automatically when the room holds no editor PC, so a player can always get
+	// back into build mode. It is not written to a slot, so it costs no storage and simply
+	// stops appearing once one has been placed somewhere.
+	const DEFAULT_EDITOR_ID = 31;
+	const DEFAULT_EDITOR_X = 64;
+	const DEFAULT_EDITOR_Y = 96;
+
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
 	const BLOCKED_COLOR = 0xff5c5c;
@@ -959,12 +966,28 @@
 		}
 	};
 
+	const hasPiece = id => {
+		for (const uid of state.objectUids) {
+			const obj = game.objects.get(uid);
+
+			if (obj && obj.furnitureId === id) return true;
+		}
+
+		return false;
+	};
+
 	const renderLayout = () => {
 		clearTracking();
 
 		renderBackdrops();
 		renderPrefix(FLOOR_PREFIX + "," + game.map.current + ",");
 		renderPrefix(SLOT_PREFIX + "," + game.map.current + ",");
+
+		const editor = FURNITURE_BY_ID[DEFAULT_EDITOR_ID];
+
+		if (editor && !hasPiece(DEFAULT_EDITOR_ID)) {
+			spawnFurniture(DEFAULT_EDITOR_X / TILE, DEFAULT_EDITOR_Y / TILE, editor);
+		}
 
 		const wanted = {};
 
