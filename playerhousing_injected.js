@@ -177,6 +177,7 @@
 		baseClaims: {},
 		floorOccupied: {},
 		solidTiles: [],
+		ourSolids: {},
 		messageTiles: [],
 		carrying: 0,
 		moving: null,
@@ -265,6 +266,20 @@
 
 	const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 
+	// Floor decor slides under furniture, so a tile that is only solid because a piece is
+	// standing on it still counts as free. Walls and anything else the map made solid do not.
+	const isFreeFloorTile = (tx, ty) => {
+		if (!isInBounds(tx, ty)) return false;
+
+		const px = tx * TILE;
+		const py = ty * TILE;
+		const row = game.map.solids[py];
+
+		if (!row || !row[px]) return true;
+
+		return !!state.ourSolids[px + "," + py];
+	};
+
 	const isFreeTile = (tx, ty) => {
 		if (!isInBounds(tx, ty)) return false;
 
@@ -310,7 +325,8 @@
 	// is already standing there.
 	const canPlaceAt = (tx, ty, id) => {
 		const anchorKey = tx + "," + ty;
-		const claims = isFloorId(id) ? state.floorOccupied : state.baseClaims;
+		const floor = isFloorId(id);
+		const claims = floor ? state.floorOccupied : state.baseClaims;
 		let ok = true;
 
 		forEachFootprintTile(tx, ty, id, (x, y, resting) => {
@@ -330,7 +346,7 @@
 				return;
 			}
 
-			if (!isFreeTile(x, y)) ok = false;
+			if (!(floor ? isFreeFloorTile(x, y) : isFreeTile(x, y))) ok = false;
 		});
 
 		return ok;
@@ -775,7 +791,9 @@
 		if (game.map.solids[py][px]) return;
 
 		game.map.solids[py][px] = "5";
+
 		state.solidTiles.push([px, py]);
+		state.ourSolids[px + "," + py] = true;
 	};
 
 	const clearSolids = () => {
@@ -784,6 +802,7 @@
 		}
 
 		state.solidTiles.length = 0;
+		state.ourSolids = {};
 	};
 
 	// Sweeps anything still registered under our uid prefixes, not just what this run put in
