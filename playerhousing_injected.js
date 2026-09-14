@@ -24,6 +24,8 @@
 
 	const PERCH_HEIGHT = 8;
 
+	const GHOST_OPACITY = 30;
+
 	const RESTING_COLOR = 0x6cd8ff;
 	const UPRIGHT_COLOR = 0xffc44d;
 	const BLOCKED_COLOR = 0xff5c5c;
@@ -64,7 +66,7 @@
 		{id: 25, name: "Charmander Plush",    category: "Plushies",    sprite: "playerhouse_charmanderplush",   layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00rhslo2"}},
 		{id: 26, name: "Squirtle Plush",      category: "Plushies",    sprite: "playerhouse_squirtleplush",     layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00n6hvc7"}},
 		{id: 27, name: "Chikorita Plush",     category: "Plushies",    sprite: "playerhouse_chicoritaplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00q4ieqb"}},
-		{id: 28, name: "Cyndaquil Plush",     category: "Plushies",    sprite: "playerhouse_cyndaquilplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00llbsbo"}},
+		{id: 28, name: "Cyndaquil Plush",     category: "Plushies",    sprite: "playerhouse_cyndiquilplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00llbsbo"}},
 		{id: 29, name: "Totodile Plush",      category: "Plushies",    sprite: "playerhouse_totodileplush",     layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00rj2mth"}},
 		{id: 30, name: "Lapras Plush",        category: "Plushies",    sprite: "playerhouse_laprasplush",       layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {icon: "music"}},
 
@@ -91,6 +93,11 @@
 		{id: 21, name: "Battle Machine",     category: "Gadgets",     sprite: "playerhouse_gadget_npcbattler", layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
 			msg: "The Battle Machine whirs to life.",
 			triggers: BATTLE_TRIGGER
+		}},
+
+		{id: 31, name: "Housing Editor PC",  category: "Gadgets",     sprite: "playerhouse_housingeditorpc",   layer: "map",   solid: true,  w: 2, h: 1, fixed: true, interact: {
+			msg: "Opened up the housing editor.",
+			triggers: "mapvar[" + MODE_VAR + "]=1"
 		}},
 
 		{id: 22, name: "Green Carpet",       category: "Floor Decor", sprite: "playerhouse_greencarpet",       layer: "floor", solid: false},
@@ -162,6 +169,8 @@
 		solidTiles: [],
 		messageTiles: [],
 		carrying: 0,
+		moving: null,
+		ghostUid: "",
 		perch: null,
 		previewUid: "",
 		camCursorX: 0,
@@ -777,7 +786,7 @@
 	// the whole room blink.
 	const sweepUnwanted = wanted => {
 		for (const uid in game.objects.ids) {
-			if (!isOurUid(uid) || uid === state.previewUid || wanted[uid]) continue;
+			if (!isOurUid(uid) || uid === state.previewUid || uid === state.ghostUid || wanted[uid]) continue;
 
 			const obj = game.objects.ids[uid];
 
@@ -1028,6 +1037,61 @@
 		gfx.endFill();
 	};
 
+	const destroyGhost = () => {
+		const obj = game.objects.get(state.ghostUid);
+
+		if (obj) game.objects.remove(obj);
+
+		state.ghostUid = "";
+	};
+
+	// Lifts the piece out of its slot straight away so the tile reads as free while it is in
+	// hand, and leaves a faded copy behind marking where it will go back to if cancelled.
+	const startMoving = (tx, ty, entry) => {
+		destroyGhost();
+
+		state.moving = {tx, ty, id: entry.id};
+		state.ghostUid = "ph_ghost";
+
+		const obj = game.objects.add({
+			type: "sprite",
+			uid: state.ghostUid,
+			texture: {
+				file: SPRITE_DIR + entry.sprite,
+				frames: 1,
+				loop: -1
+			},
+			x: tx * TILE,
+			y: ty * TILE,
+			offset: {
+				x: getSpriteOffsetX(entry.id),
+				y: 0
+			},
+			depth: getLayerDepth(entry.layer),
+			map: game.map.current,
+			addToMap: true,
+			parent: getLayerContainer(entry.layer)
+		});
+
+		if (obj) obj.setOpacity(GHOST_OPACITY);
+
+		setSlot(tx, ty, 0, isFloorEntry(entry));
+		startCarrying(entry.id);
+	};
+
+	const cancelCarry = () => {
+		if (state.moving) {
+			const entry = FURNITURE_BY_ID[state.moving.id];
+
+			setSlot(state.moving.tx, state.moving.ty, state.moving.id, isFloorEntry(entry));
+
+			state.moving = null;
+		}
+
+		destroyGhost();
+		destroyPreview();
+	};
+
 	const destroyPreview = () => {
 		const obj = game.objects.get(state.previewUid);
 		if (obj) game.objects.remove(obj);
@@ -1157,12 +1221,22 @@
 
 		const matches = key => prefixes.some(prefix => key.startsWith(prefix));
 
+		const isFixed = key => {
+			const id = Object.prototype.hasOwnProperty.call(state.pending, key) ?
+				state.pending[key] :
+				+game.map.eventVars[key] || 0;
+
+			const entry = FURNITURE_BY_ID[id];
+
+			return entry && entry.fixed;
+		};
+
 		for (const key in game.map.eventVars) {
-			if (matches(key)) state.pending[key] = 0;
+			if (matches(key) && !isFixed(key)) state.pending[key] = 0;
 		}
 
 		for (const key in state.pending) {
-			if (matches(key)) state.pending[key] = 0;
+			if (matches(key) && !isFixed(key)) state.pending[key] = 0;
 		}
 
 		renderLayout();
@@ -1206,9 +1280,15 @@
 			answers.push([menu.label, () => openStyleMenu(menu, tx, ty)]);
 		}
 
-		if (placed) answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
+		if (placed && !placed.fixed) {
+			answers.push(["Move " + placed.name, () => startMoving(objectAnchor[0], objectAnchor[1], placed)]);
+			answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
+		}
 
-		if (placedFloor) answers.push(["Pick Up " + placedFloor.name, () => setSlot(floorAnchor[0], floorAnchor[1], 0, true)]);
+		if (placedFloor && !placedFloor.fixed) {
+			answers.push(["Move " + placedFloor.name, () => startMoving(floorAnchor[0], floorAnchor[1], placedFloor)]);
+			answers.push(["Pick Up " + placedFloor.name, () => setSlot(floorAnchor[0], floorAnchor[1], 0, true)]);
+		}
 
 		answers.push(["Clear All", () => askToClearAll(tx, ty)]);
 		answers.push(["Cancel"]);
@@ -1338,6 +1418,9 @@
 
 			const id = state.carrying;
 
+			state.moving = null;
+
+			destroyGhost();
 			destroyPreview();
 			setSlot(state.cursorX, state.cursorY, id, isFloorId(id));
 			drawCursor();
@@ -1380,7 +1463,7 @@
 
 		if (game.input.keyPressed("cancel")) {
 			if (state.carrying) {
-				destroyPreview();
+				cancelCarry();
 				drawCursor();
 			} else {
 				askToFinish();
@@ -1435,6 +1518,7 @@
 		state.pending = {};
 		state.cancelAnswer = "";
 
+		destroyGhost();
 		destroyPreview();
 
 		if (state.ownerState && state.origStateUpdate) {
@@ -1462,7 +1546,7 @@
 
 		state.exiting = true;
 
-		destroyPreview();
+		cancelCarry();
 		destroyGraphics();
 	};
 
