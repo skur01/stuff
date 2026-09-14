@@ -710,7 +710,7 @@
 
 		if (!anchor) return false;
 
-		const entry = FURNITURE_BY_ID[getSlot(anchor[0], anchor[1], false)];
+		const entry = getEntryAt(anchor[0], anchor[1], false);
 
 		if (!entry || !entry.touch) return false;
 
@@ -1222,6 +1222,18 @@
 		game.textbox.answers(answers, selected, top);
 	};
 
+	// The default editor PC is spawned live rather than stored in a slot, so the slot lookup
+	// comes back empty for it. Fall back to the furnitureId on the object standing there.
+	const getEntryAt = (tx, ty, floor) => {
+		const id = getSlot(tx, ty, floor);
+
+		if (id) return FURNITURE_BY_ID[id];
+
+		const obj = game.objects.get(getFurnitureUid(tx, ty, floor));
+
+		return obj && obj.furnitureId ? FURNITURE_BY_ID[obj.furnitureId] : null;
+	};
+
 	const openStyleMenu = (menu, tx, ty) => {
 		const current = getEv(menu.ev);
 
@@ -1288,8 +1300,8 @@
 		const objectAnchor = getAnchorAt(tx, ty, false);
 		const floorAnchor = getAnchorAt(tx, ty, true);
 
-		const placed = objectAnchor ? FURNITURE_BY_ID[getSlot(objectAnchor[0], objectAnchor[1], false)] : null;
-		const placedFloor = floorAnchor ? FURNITURE_BY_ID[getSlot(floorAnchor[0], floorAnchor[1], true)] : null;
+		const placed = objectAnchor ? getEntryAt(objectAnchor[0], objectAnchor[1], false) : null;
+		const placedFloor = floorAnchor ? getEntryAt(floorAnchor[0], floorAnchor[1], true) : null;
 
 		const answers = [];
 
