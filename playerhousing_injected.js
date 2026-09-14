@@ -52,9 +52,9 @@
 		{id: 6,  name: "Mart Shelf (right)", category: "Decor",       sprite: "playerhouse_martshelfright",    layer: "map",   solid: true,  w: 1, h: 2},
 		{id: 10, name: "White Mart Shelf",   category: "Decor",       sprite: "playerhouse_martwhiteshelf",    layer: "map",   solid: true,  w: 2, h: 2, base: 1},
 
-		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true},
-		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true},
-		{id: 9,  name: "Glass Table",        category: "Furniture",   sprite: "playerhouse_glasstable",        layer: "map",    solid: true},
+		{id: 7,  name: "Red Table",          category: "Furniture",   sprite: "playerhouse_redtable",          layer: "map",    solid: true,  h: 3, base: 2},
+		{id: 8,  name: "Plain Table",        category: "Furniture",   sprite: "playerhouse_plaintable",        layer: "map",    solid: true,  h: 3, base: 2},
+		{id: 9,  name: "Glass Table",        category: "Furniture",   sprite: "playerhouse_glasstable",        layer: "map",    solid: true,  h: 3, base: 2},
 		{id: 11, name: "Red Stool",          category: "Furniture",   sprite: "playerhouse_redstool",          layer: "map",    solid: false},
 		{id: 12, name: "Plain Stool",        category: "Furniture",   sprite: "playerhouse_plainstool",        layer: "map",    solid: false},
 
@@ -123,19 +123,19 @@
 	const FLOOR_DECOR_DEPTH = "z+2";
 
 	const BACKDROPS = [
-		{ev: "PlayerHousing_FloorStyle", depth: "z", x: 128, y: 192, options: [
+		{ev: "PlayerHousing_FloorStyle", sort: -1100, x: 128, y: 192, options: [
 			"playerhouse_woodfloor",
 			"playerhouse_tilefloor",
 			"playerhouse_pkmncenterfloor",
 			"playerhouse_martfloor"
 		]},
-		{ev: "PlayerHousing_WallStyle", depth: "z", x: 128, y: 80, options: [
+		{ev: "PlayerHousing_WallStyle", sort: -1200, x: 128, y: 80, options: [
 			"playerhouse_plainwall",
 			"playerhouse_yellowwall",
 			"playerhouse_pkmncenterwall",
 			"playerhouse_martwall"
 		]},
-		{sprite: "playerhouse_defaultexitmatandshadow", depth: "z+1", x: 120, y: 240}
+		{sprite: "playerhouse_defaultexitmatandshadow", sort: -1000, x: 120, y: 240}
 	];
 
 	const STYLE_MENUS = [
@@ -844,6 +844,15 @@
 		} else if (existing && existing.furnitureId === entry.id) {
 			obj = existing;
 
+			// A footprint width measured after the first render changes the centring offset,
+			// and a reused object would otherwise keep the one it was built with.
+			const offsetX = getSpriteOffsetX(entry.id);
+
+			if (obj.offset.custom.x !== offsetX) {
+				obj.offset.custom.x = offsetX;
+				obj.setPosition(obj.x, obj.y);
+			}
+
 			if (!obj.sprite.parent) obj.addToMap();
 		} else {
 			if (existing) game.objects.remove(existing);
@@ -947,6 +956,13 @@
 		}
 	};
 
+	// addObject turns a "z<n>" string into depth = -n, and the engine then draws each sprite
+	// at y + offset.y - depth. That makes a bottom sprite's sort order depend on where it
+	// sits, so a full-room backdrop moved down the map climbs above the things meant to lie
+	// on it. This solves the string backwards from the sort order the sprite should end up
+	// with, making it independent of position.
+	const getDepthString = (y, sort) => "z" + (sort - y - TILE);
+
 	const renderBackdrops = () => {
 		sweepLegacyBackdrops();
 
@@ -964,7 +980,7 @@
 			const x = typeof backdrop.x === "number" ? backdrop.x : BACKDROP_X;
 			const y = typeof backdrop.y === "number" ? backdrop.y : BACKDROP_Y;
 
-			game.map.addObject(8, x, y, uid, SPRITE_OWNER + sprite, backdrop.depth, 0, 0, -1, -1, "0", 0, 0);
+			game.map.addObject(8, x, y, uid, SPRITE_OWNER + sprite, getDepthString(y, backdrop.sort), 0, 0, -1, -1, "0", 0, 0);
 
 			state.objectUids.push(uid);
 		}
@@ -1122,8 +1138,13 @@
 
 		if (obj) obj.setOpacity(GHOST_OPACITY);
 
-		setSlot(tx, ty, 0, isFloorEntry(entry));
+		// Carry state has to be set before the slot clears: renderLayout respawns the default
+		// editor PC when none is on the map, and only skips it while one is in hand.
 		startCarrying(entry.id);
+
+		setSlot(tx, ty, 0, isFloorEntry(entry));
+
+		drawCursor();
 	};
 
 	const cancelCarry = () => {
