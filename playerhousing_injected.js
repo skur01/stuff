@@ -77,7 +77,7 @@
 		{id: 27, name: "Chikorita Plush",     category: "Plushies",    sprite: "playerhouse_chicoritaplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00q4ieqb"}},
 		{id: 28, name: "Cyndaquil Plush",     category: "Plushies",    sprite: "playerhouse_cyndiquilplush",    layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00llbsbo"}},
 		{id: 29, name: "Totodile Plush",      category: "Plushies",    sprite: "playerhouse_totodileplush",     layer: "map",   solid: true,  w: 1, h: 1, touch: {icon: "music", cry: "00rj2mth"}},
-		{id: 30, name: "Lapras Plush",        category: "Plushies",    sprite: "playerhouse_laprasplush",       layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {icon: "music"}},
+		{id: 30, name: "Lapras Plush",        category: "Plushies",    sprite: "playerhouse_laprasplush",       layer: "map",   solid: true,  w: 2, h: 2, base: 1, touch: {icon: "music", cry: "005yz6io"}},
 
 		{id: 18, name: "PC",                 category: "Gadgets",     sprite: "playerhouse_gadget_pc",         layer: "map",   solid: true,  w: 1, h: 2, base: 1, interact: {
 			msg: "Booted up the PC!",
@@ -181,6 +181,7 @@
 		carrying: 0,
 		moving: null,
 		ghostUid: "",
+		ghostObj: null,
 		perch: null,
 		previewUid: "",
 		camCursorX: 0,
@@ -1074,10 +1075,17 @@
 		gfx.endFill();
 	};
 
+	// Holds the object itself rather than looking it up by uid. objects.remove() bails out
+	// early if the object is no longer in its list, which left the old ghost parented and
+	// unreachable once objects.add() rebound "ph_ghost" to the next one.
 	const destroyGhost = () => {
-		const obj = game.objects.get(state.ghostUid);
+		if (state.ghostObj) {
+			state.ghostObj.removeFromMap();
 
-		if (obj) game.objects.remove(obj);
+			game.objects.remove(state.ghostObj);
+
+			state.ghostObj = null;
+		}
 
 		state.ghostUid = "";
 	};
@@ -1109,6 +1117,8 @@
 			addToMap: true,
 			parent: getLayerContainer(entry.layer)
 		});
+
+		state.ghostObj = obj || null;
 
 		if (obj) obj.setOpacity(GHOST_OPACITY);
 
