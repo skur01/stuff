@@ -985,7 +985,7 @@
 
 		const editor = FURNITURE_BY_ID[DEFAULT_EDITOR_ID];
 
-		if (editor && !hasPiece(DEFAULT_EDITOR_ID)) {
+		if (editor && !hasPiece(DEFAULT_EDITOR_ID) && state.carrying !== DEFAULT_EDITOR_ID) {
 			spawnFurniture(DEFAULT_EDITOR_X / TILE, DEFAULT_EDITOR_Y / TILE, editor);
 		}
 
@@ -1315,14 +1315,16 @@
 			answers.push([menu.label, () => openStyleMenu(menu, tx, ty)]);
 		}
 
-		if (placed && !placed.fixed) {
+		if (placed) {
 			answers.push(["Move " + placed.name, () => startMoving(objectAnchor[0], objectAnchor[1], placed)]);
-			answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
+
+			if (!placed.fixed) answers.push(["Pick Up " + placed.name, () => setSlot(objectAnchor[0], objectAnchor[1], 0, false)]);
 		}
 
-		if (placedFloor && !placedFloor.fixed) {
+		if (placedFloor) {
 			answers.push(["Move " + placedFloor.name, () => startMoving(floorAnchor[0], floorAnchor[1], placedFloor)]);
-			answers.push(["Pick Up " + placedFloor.name, () => setSlot(floorAnchor[0], floorAnchor[1], 0, true)]);
+
+			if (!placedFloor.fixed) answers.push(["Pick Up " + placedFloor.name, () => setSlot(floorAnchor[0], floorAnchor[1], 0, true)]);
 		}
 
 		answers.push(["Clear All", () => askToClearAll(tx, ty)]);
