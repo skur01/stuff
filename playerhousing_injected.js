@@ -860,6 +860,18 @@
 			game.map.addObject(8, tx * TILE, ty * TILE, uid, SPRITE_OWNER + entry.sprite, FLOOR_DECOR_DEPTH, 0, 0, -1, -1, "0", 0, 0);
 
 			obj = game.objects.get(uid);
+
+			// addObject has no way to pass an offset, so the centring the carry preview
+			// applies has to be set on the object afterwards or the piece lands left of
+			// where it was shown.
+			if (obj) {
+				const offsetX = getSpriteOffsetX(entry.id);
+
+				if (obj.offset.custom.x !== offsetX) {
+					obj.offset.custom.x = offsetX;
+					obj.setPosition(obj.x, obj.y);
+				}
+			}
 		} else if (existing && existing.furnitureId === entry.id) {
 			obj = existing;
 
